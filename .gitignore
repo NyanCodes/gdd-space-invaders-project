@@ -1,2 +1,11 @@
 *.jar
 *.class
+*.md
+!README.md
+
+# macOS junk
+.DS_Store
+
+# Dev-tool output (SpriteSlicer)
+src/images/sprites_out_test/
+src/images/sprites_out/

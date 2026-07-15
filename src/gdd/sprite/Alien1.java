@@ -29,7 +29,13 @@ public class Alien1 extends Enemy {
     }
 
     public void act(int direction) {
-        this.y ++;
+        // Horizontal side-scroller: aliens enter from the right and move left.
+        this.x -= 2;
+
+        // Clean up once fully off the left edge.
+        if (this.x < -ALIEN_WIDTH) {
+            die();
+        }
     }
 
     public Bomb getBomb() {

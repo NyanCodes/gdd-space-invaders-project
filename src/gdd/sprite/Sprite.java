@@ -12,12 +12,14 @@ abstract public class Sprite {
     protected int x;
     protected int y;
     protected int dx;
+    protected int dy;
 
     public Sprite() {
         visible = true;
     }
 
-    abstract public void act();
+    public void act() {
+    }
 
     public boolean collidesWith(Sprite other) {
         if (other == null || !this.isVisible() || !other.isVisible()) {

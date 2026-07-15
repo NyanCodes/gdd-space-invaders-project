@@ -23,14 +23,18 @@ public class SpeedUp extends PowerUp {
     }
 
     public void act() {
-        // SpeedUp specific behavior can be added here
-        // For now, it just moves down the screen
-        this.y += 2; // Move down by 2 pixel each frame
+        // Horizontal side-scroller: drift left from the right edge so the
+        // player can fly into it.
+        this.x -= 2;
+        if (this.x < -60) {
+            die(); // Off-screen, clean up
+        }
     }
 
     public void upgrade(Player player) {
-        // Upgrade the player with speed boost
-        player.setSpeed(player.getSpeed() + 4); // Increase player's speed by 1
+        // Boost both ship movement and bullet speed (capped in Player).
+        player.setSpeed(player.getSpeed() + 1);
+        player.setShotSpeed(player.getShotSpeed() + 4);
         this.die(); // Remove the power-up after use
     }
 

@@ -38,6 +38,7 @@ public class TitleScene extends JPanel {
     public void start() {
         addKeyListener(new TAdapter());
         setFocusable(true);
+        requestFocusInWindow();
         setBackground(Color.black);
 
         timer = new Timer(1000 / 60, new GameCycle());

@@ -7,6 +7,7 @@ import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
 import gdd.powerup.SpeedUp;
 import gdd.sprite.Alien1;
+import gdd.sprite.Boss;
 import gdd.sprite.Enemy;
 import gdd.sprite.Explosion;
 import gdd.sprite.Player;
@@ -14,8 +15,12 @@ import gdd.sprite.Shot;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
@@ -36,6 +41,7 @@ public class Scene1 extends JPanel {
     private List<Explosion> explosions;
     private List<Shot> shots;
     private Player player;
+    private Image background;
     // private Shot shot;
 
     final int BLOCKHEIGHT = 50;
@@ -44,7 +50,14 @@ public class Scene1 extends JPanel {
     final int BLOCKS_TO_DRAW = BOARD_HEIGHT / BLOCKHEIGHT;
 
     private int direction = -1;
-    private int deaths = 0;
+    private int deaths = 0; // score: aliens +1, bosses +5
+
+    private int lives = PLAYER_LIVES;
+    private int invincibleFrames = 0; // blink window after a respawn
+    private int nextAlienSpawnFrame = 120;
+    private int nextPowerupFrame = 20 * 60;
+    private int bossSpawnIndex = 0;
+    private Image lifeIcon; // small vertical (nose-up) ship for the HUD
 
     private boolean inGame = true;
     private String message = "Game Over";
@@ -109,19 +122,21 @@ public class Scene1 extends JPanel {
 
     private void loadSpawnDetails() {
         // TODO load this from a file
-        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", 100, 0));
-        spawnMap.put(200, new SpawnDetails("Alien1", 200, 0));
-        spawnMap.put(300, new SpawnDetails("Alien1", 300, 0));
+        // Horizontal side-scroller: enemies enter from the right edge (x = BOARD_WIDTH)
+        // and are spread out vertically by varying y.
+        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 200));
+        spawnMap.put(200, new SpawnDetails("Alien1", BOARD_WIDTH, 200));
+        spawnMap.put(300, new SpawnDetails("Alien1", BOARD_WIDTH, 300));
 
-        spawnMap.put(400, new SpawnDetails("Alien1", 400, 0));
-        spawnMap.put(401, new SpawnDetails("Alien1", 450, 0));
-        spawnMap.put(402, new SpawnDetails("Alien1", 500, 0));
-        spawnMap.put(403, new SpawnDetails("Alien1", 550, 0));
+        spawnMap.put(400, new SpawnDetails("Alien1", BOARD_WIDTH, 120));
+        spawnMap.put(401, new SpawnDetails("Alien1", BOARD_WIDTH, 240));
+        spawnMap.put(402, new SpawnDetails("Alien1", BOARD_WIDTH, 360));
+        spawnMap.put(403, new SpawnDetails("Alien1", BOARD_WIDTH, 480));
 
-        spawnMap.put(500, new SpawnDetails("Alien1", 100, 0));
-        spawnMap.put(501, new SpawnDetails("Alien1", 150, 0));
-        spawnMap.put(502, new SpawnDetails("Alien1", 200, 0));
-        spawnMap.put(503, new SpawnDetails("Alien1", 350, 0));
+        spawnMap.put(500, new SpawnDetails("Alien1", BOARD_WIDTH, 100));
+        spawnMap.put(501, new SpawnDetails("Alien1", BOARD_WIDTH, 250));
+        spawnMap.put(502, new SpawnDetails("Alien1", BOARD_WIDTH, 400));
+        spawnMap.put(503, new SpawnDetails("Alien1", BOARD_WIDTH, 550));
     }
 
     private void initBoard() {
@@ -159,6 +174,8 @@ public class Scene1 extends JPanel {
         explosions = new ArrayList<>();
         shots = new ArrayList<>();
 
+        background = new ImageIcon(IMG_BACKGROUND).getImage();
+
         // for (int i = 0; i < 4; i++) {
         // for (int j = 0; j < 6; j++) {
         // var enemy = new Enemy(ALIEN_INIT_X + (ALIEN_WIDTH + ALIEN_GAP) * j,
@@ -168,39 +185,77 @@ public class Scene1 extends JPanel {
         // }
         player = new Player();
         // shot = new Shot();
+
+        lifeIcon = createLifeIcon();
+    }
+
+    // Small vertical ship icon (nose up) for the lives display: the ship
+    // sprite faces right, so rotate it 90 degrees counter-clockwise.
+    private Image createLifeIcon() {
+        var ii = new ImageIcon(IMG_PLAYER);
+        int w = ii.getIconWidth();
+        int h = ii.getIconHeight();
+
+        BufferedImage rotated = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = rotated.createGraphics();
+        g2.rotate(-Math.PI / 2);
+        g2.translate(-w, 0);
+        g2.drawImage(ii.getImage(), 0, 0, null);
+        g2.dispose();
+        return rotated;
+    }
+
+    // Top edge of the bottom dashboard; gameplay stays above this line.
+    // Uses the real panel height so the bar is never cut off by window insets.
+    private int playfieldBottom() {
+        int h = getHeight();
+        if (h <= 0) {
+            h = BOARD_HEIGHT;
+        }
+        return h - DASHBOARD_HEIGHT;
+    }
+
+    private void drawBackground(Graphics g) {
+        if (background == null) {
+            return;
+        }
+        // Scroll the background image right -> left, wrapping seamlessly by
+        // drawing a second copy immediately after the first.
+        int offset = frame % BOARD_WIDTH;
+        g.drawImage(background, -offset, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
+        g.drawImage(background, BOARD_WIDTH - offset, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
     }
 
     private void drawMap(Graphics g) {
-        // Draw scrolling starfield background
+        // Draw horizontally scrolling starfield background (right -> left).
 
-        // Calculate smooth scrolling offset (1 pixel per frame)
-        int scrollOffset = (frame) % BLOCKHEIGHT;
+        // Smooth scrolling offset (1 pixel per frame).
+        int scrollOffset = (frame) % BLOCKWIDTH;
 
-        // Calculate which rows to draw based on screen position
-        int baseRow = (frame) / BLOCKHEIGHT;
-        int rowsNeeded = (BOARD_HEIGHT / BLOCKHEIGHT) + 2; // +2 for smooth scrolling
+        // Which MAP columns are currently visible, based on how far we've scrolled.
+        int baseCol = (frame) / BLOCKWIDTH;
+        int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; // +2 for smooth scrolling
 
-        // Loop through rows that should be visible on screen
-        for (int screenRow = 0; screenRow < rowsNeeded; screenRow++) {
-            // Calculate which MAP row to use (with wrapping)
-            int mapRow = (baseRow + screenRow) % MAP.length;
+        // Loop through columns that should be visible on screen.
+        for (int screenCol = 0; screenCol < colsNeeded; screenCol++) {
+            // Which MAP column to use (with wrapping).
+            int mapCol = (baseCol + screenCol) % MAP[0].length;
 
-            // Calculate Y position for this row
-            // int y = (screenRow * BLOCKHEIGHT) - scrollOffset;
-            int y = BOARD_HEIGHT - ( (screenRow * BLOCKHEIGHT) - scrollOffset );
+            // X position for this column; content marches leftward.
+            int x = (screenCol * BLOCKWIDTH) - scrollOffset;
 
-            // Skip if row is completely off-screen
-            if (y > BOARD_HEIGHT || y < -BLOCKHEIGHT) {
+            // Skip if column is completely off-screen.
+            if (x > BOARD_WIDTH || x < -BLOCKWIDTH) {
                 continue;
             }
 
-            // Draw each column in this row
-            for (int col = 0; col < MAP[mapRow].length; col++) {
-                if (MAP[mapRow][col] == 1) {
-                    // Calculate X position
-                    int x = col * BLOCKWIDTH;
+            // Draw each row in this column.
+            for (int row = 0; row < MAP.length; row++) {
+                if (MAP[row][mapCol] == 1) {
+                    // Y position for this row.
+                    int y = row * BLOCKHEIGHT;
 
-                    // Draw a cluster of stars
+                    // Draw a cluster of stars.
                     drawStarCluster(g, x, y, BLOCKWIDTH, BLOCKHEIGHT);
                 }
             }
@@ -265,15 +320,12 @@ public class Scene1 extends JPanel {
 
     private void drawPlayer(Graphics g) {
 
-        if (player.isVisible()) {
+        // Blink while invincible right after a respawn.
+        boolean blinkHidden = invincibleFrames > 0 && (invincibleFrames / 4) % 2 == 0;
+
+        if (player.isVisible() && !blinkHidden) {
 
             g.drawImage(player.getImage(), player.getX(), player.getY(), this);
-        }
-
-        if (player.isDying()) {
-
-            player.die();
-            inGame = false;
         }
     }
 
@@ -327,19 +379,16 @@ public class Scene1 extends JPanel {
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
 
-        g.setColor(Color.white);
-        g.drawString("FRAME: " + frame, 10, 10);
-
-        g.setColor(Color.green);
-
         if (inGame) {
 
-            drawMap(g);  // Draw background stars first
+            drawBackground(g);  // Draw the scrolling background image first
             drawExplosions(g);
             drawPowreUps(g);
             drawAliens(g);
             drawPlayer(g);
             drawShot(g);
+            drawBossHpBars(g);
+            drawDashboard(g);   // all game status lives in the bottom bar
 
         } else {
 
@@ -351,6 +400,87 @@ public class Scene1 extends JPanel {
         }
 
         Toolkit.getDefaultToolkit().sync();
+    }
+
+    private void drawBossHpBars(Graphics g) {
+
+        for (Enemy enemy : enemies) {
+            if (enemy instanceof Boss && enemy.isVisible() && !enemy.isDying()) {
+                Boss boss = (Boss) enemy;
+
+                int barW = boss.getWidth();
+                int barH = 7;
+                int bx = boss.getX();
+                int by = boss.getY() + boss.getHeight() + 6; // just below the boss
+
+                g.setColor(new Color(40, 0, 0));
+                g.fillRect(bx, by, barW, barH);
+                g.setColor(Color.red);
+                g.fillRect(bx + 1, by + 1,
+                        (barW - 2) * boss.getHp() / boss.getMaxHp(), barH - 2);
+                g.setColor(Color.white);
+                g.drawRect(bx, by, barW, barH);
+            }
+        }
+    }
+
+    private void drawDashboard(Graphics g) {
+
+        int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
+        int top = playfieldBottom();
+
+        // Dark space panel with a green scanline on top — matches the
+        // black/green/white arcade look of the rest of the game.
+        g.setColor(new Color(4, 12, 24));
+        g.fillRect(0, top, panelW, DASHBOARD_HEIGHT);
+        g.setColor(new Color(0, 255, 120));
+        g.fillRect(0, top, panelW, 2);
+
+        Font labelFont = new Font("Monospaced", Font.BOLD, 12);
+        Font valueFont = new Font("Monospaced", Font.BOLD, 16);
+        int labelY = top + 20;
+        int valueY = top + 44;
+
+        g.setFont(labelFont);
+        g.setColor(new Color(0, 255, 120));
+        g.drawString("LIVES", 14, labelY);
+        g.drawString("SPEED", 140, labelY);
+        g.drawString("BULLET", 250, labelY);
+        g.drawString("SCORE", 370, labelY);
+
+        // Remaining lives as small vertical ship icons.
+        if (lifeIcon != null) {
+            int iw = lifeIcon.getWidth(null);
+            for (int i = 0; i < lives; i++) {
+                g.drawImage(lifeIcon, 14 + i * (iw + 10), labelY + 6, this);
+            }
+        }
+
+        g.setFont(valueFont);
+        g.setColor(Color.white);
+        g.drawString(String.valueOf(player.getSpeed()), 140, valueY);
+        g.drawString(String.valueOf(player.getShotSpeed()), 250, valueY);
+        g.drawString(String.valueOf(deaths), 370, valueY);
+
+        // Flashing boss alert while a boss is on screen.
+        boolean bossAlive = false;
+        for (Enemy enemy : enemies) {
+            if (enemy instanceof Boss && enemy.isVisible() && !enemy.isDying()) {
+                bossAlive = true;
+                break;
+            }
+        }
+        if (bossAlive && (frame / 20) % 2 == 0) {
+            g.setColor(Color.red);
+            g.drawString("!! BOSS !!", 460, valueY);
+        }
+
+        // Game timer, bottom-right corner.
+        int seconds = frame / 60;
+        String time = String.format("TIME %02d:%02d", seconds / 60, seconds % 60);
+        FontMetrics fm = g.getFontMetrics(valueFont);
+        g.setColor(new Color(0, 255, 120));
+        g.drawString(time, panelW - fm.stringWidth(time) - 14, valueY);
     }
 
     private void gameOver(Graphics g) {
@@ -374,8 +504,17 @@ public class Scene1 extends JPanel {
 
     private void update() {
 
+        int elapsedSeconds = frame / 60;
 
-        // Check enemy spawn
+        // Stage clear once the full run is survived (5 minutes for now).
+        if (frame >= GAME_DURATION_SECONDS * 60) {
+            inGame = false;
+            timer.stop();
+            message = "Stage Clear!";
+            return;
+        }
+
+        // Check enemy spawn (scripted spawns)
         // TODO this approach can only spawn one enemy at a frame
         SpawnDetails sd = spawnMap.get(frame);
         if (sd != null) {
@@ -401,14 +540,42 @@ public class Scene1 extends JPanel {
             }
         }
 
-        if (deaths == NUMBER_OF_ALIENS_TO_DESTROY) {
-            inGame = false;
-            timer.stop();
-            message = "Game won!";
+        // Random aliens from the front (right edge), 1-2 at a time at random
+        // heights; the gap between waves shrinks every 30s to ramp difficulty.
+        if (frame >= nextAlienSpawnFrame) {
+            int count = 1 + randomizer.nextInt(2);
+            for (int i = 0; i < count; i++) {
+                int ay = 10 + randomizer.nextInt(Math.max(1, playfieldBottom() - 60));
+                enemies.add(new Alien1(BOARD_WIDTH + randomizer.nextInt(80), ay));
+            }
+            int gap = Math.max(30, 100 - (elapsedSeconds / 30) * 10);
+            nextAlienSpawnFrame = frame + gap + randomizer.nextInt(50);
+        }
+
+        // A speed-up drop every 25-45 seconds.
+        if (frame >= nextPowerupFrame) {
+            int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
+            powerups.add(new SpeedUp(BOARD_WIDTH, py));
+            nextPowerupFrame = frame + (25 + randomizer.nextInt(20)) * 60;
+        }
+
+        // Boss schedule — extend by adding entries to BOSS_SPAWN_SECONDS.
+        if (bossSpawnIndex < BOSS_SPAWN_SECONDS.length
+                && frame == BOSS_SPAWN_SECONDS[bossSpawnIndex] * 60) {
+            enemies.add(new Boss(BOARD_WIDTH, playfieldBottom() / 2 - 40, playfieldBottom()));
+            bossSpawnIndex++;
         }
 
         // player
+        if (invincibleFrames > 0) {
+            invincibleFrames--;
+        }
         player.act();
+        // Keep the ship above the dashboard.
+        int maxPlayerY = playfieldBottom() - player.getHeight() - 2;
+        if (player.getY() > maxPlayerY) {
+            player.setY(maxPlayerY);
+        }
 
         // Power-ups
         for (PowerUp powerup : powerups) {
@@ -419,6 +586,7 @@ public class Scene1 extends JPanel {
                 }
             }
         }
+        powerups.removeIf(p -> !p.isVisible());
 
         // Enemies
         for (Enemy enemy : enemies) {
@@ -427,48 +595,81 @@ public class Scene1 extends JPanel {
             }
         }
 
+        // Player <-> enemy collision: getting hit costs a life.
+        if (invincibleFrames == 0 && player.isVisible()) {
+            for (Enemy enemy : enemies) {
+                if (enemy.isVisible() && !enemy.isDying() && player.collidesWith(enemy)) {
+                    explosions.add(new Explosion(player.getX(), player.getY()));
+                    if (!(enemy instanceof Boss)) {
+                        // The alien is destroyed in the crash (no score for it).
+                        enemy.setDying(true);
+                        explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                    }
+                    lives--;
+                    if (lives <= 0) {
+                        player.die();
+                        inGame = false;
+                        timer.stop();
+                        message = "Game Over";
+                    } else {
+                        player.respawn();
+                        invincibleFrames = 120; // 2s of blinking safety
+                    }
+                    break;
+                }
+            }
+        }
+
         // shot
         List<Shot> shotsToRemove = new ArrayList<>();
         for (Shot shot : shots) {
 
             if (shot.isVisible()) {
-                int shotX = shot.getX();
-                int shotY = shot.getY();
 
                 for (Enemy enemy : enemies) {
                     // Collision detection: shot and enemy
-                    int enemyX = enemy.getX();
-                    int enemyY = enemy.getY();
+                    if (enemy.isVisible() && !enemy.isDying() && shot.isVisible()
+                            && shot.collidesWith(enemy)) {
 
-                    if (enemy.isVisible() && shot.isVisible()
-                            && shotX >= (enemyX)
-                            && shotX <= (enemyX + ALIEN_WIDTH)
-                            && shotY >= (enemyY)
-                            && shotY <= (enemyY + ALIEN_HEIGHT)) {
-
-                        var ii = new ImageIcon(IMG_EXPLOSION);
-                        enemy.setImage(ii.getImage());
-                        enemy.setDying(true);
-                        explosions.add(new Explosion(enemyX, enemyY));
-                        deaths++;
+                        if (enemy instanceof Boss) {
+                            Boss boss = (Boss) enemy;
+                            boss.hit();
+                            if (boss.isDead()) {
+                                boss.setDying(true);
+                                explosions.add(new Explosion(
+                                        boss.getX() + boss.getWidth() / 2 - 18,
+                                        boss.getY() + boss.getHeight() / 2 - 18));
+                                deaths += 5; // bosses are worth 5
+                            }
+                        } else {
+                            enemy.setDying(true);
+                            explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                            deaths++;
+                        }
                         shot.die();
                         shotsToRemove.add(shot);
+                        break;
                     }
                 }
 
-                int y = shot.getY();
-                // y -= 4;
-                y -= 20;
+                // Shots travel to the right at the player's bullet speed;
+                // remove once off the right edge.
+                if (shot.isVisible()) {
+                    int newX = shot.getX() + player.getShotSpeed();
 
-                if (y < 0) {
-                    shot.die();
-                    shotsToRemove.add(shot);
-                } else {
-                    shot.setY(y);
+                    if (newX > BOARD_WIDTH) {
+                        shot.die();
+                        shotsToRemove.add(shot);
+                    } else {
+                        shot.setX(newX);
+                    }
                 }
             }
         }
         shots.removeAll(shotsToRemove);
+
+        // Drop fully dead enemies so the list stays small over a 5-minute run.
+        enemies.removeIf(e -> !e.isVisible());
 
         // enemies
         // for (Enemy enemy : enemies) {
@@ -565,16 +766,15 @@ public class Scene1 extends JPanel {
 
             player.keyPressed(e);
 
-            int x = player.getX();
-            int y = player.getY();
-
             int key = e.getKeyCode();
 
             if (key == KeyEvent.VK_SPACE && inGame) {
                 System.out.println("Shots: " + shots.size());
                 if (shots.size() < 4) {
-                    // Create a new shot and add it to the list
-                    Shot shot = new Shot(x, y);
+                    // Fire from the tip of the ship: right edge, vertically centered.
+                    int tipX = player.getX() + player.getWidth();
+                    int tipY = player.getY() + player.getHeight() / 2;
+                    Shot shot = new Shot(tipX, tipY);
                     shots.add(shot);
                 }
             }

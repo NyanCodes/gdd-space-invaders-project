@@ -28,9 +28,19 @@ public class Global {
     public static final int PLAYER_WIDTH = 30; // Doubled from 15
     public static final int PLAYER_HEIGHT = 20; // Doubled from 10
 
+    // Game flow / HUD
+    public static final int GAME_DURATION_SECONDS = 300; // stage length: 5 minutes
+    public static final int PLAYER_LIVES = 3;
+    public static final int DASHBOARD_HEIGHT = 64; // bottom status bar
+
+    // Boss
+    public static final int BOSS_HP = 5; // shots needed to kill a boss
+    public static final int[] BOSS_SPAWN_SECONDS = {30, 60}; // add entries to extend
+
     // Images
     public static final String IMG_ENEMY = "src/images/alien.png";
-    public static final String IMG_PLAYER = "src/images/player.png";
+    public static final String IMG_PLAYER = "src/images/ship1.png";
+    public static final String IMG_BACKGROUND = "src/images/game_background.jpg";
     public static final String IMG_SHOT = "src/images/shot.png";
     public static final String IMG_EXPLOSION = "src/images/explosion.png";
     public static final String IMG_TITLE = "src/images/title.png";
