@@ -5,6 +5,7 @@ import gdd.Game;
 import static gdd.Global.*;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.Toolkit;
@@ -18,12 +19,23 @@ import javax.swing.Timer;
 
 public class TitleScene extends JPanel {
 
+    private static final String[] MENU_ITEMS = {"START", "OPTIONS", "EXIT"};
+    private static final int MENU_START = 0;
+    private static final int MENU_OPTIONS = 1;
+    private static final int MENU_EXIT = 2;
+
+    private static final int MENU_TOP_Y = 520;
+    private static final int MENU_SPACING = 40;
+
     private int frame = 0;
     private Image image;
     private AudioPlayer audioPlayer;
     private final Dimension d = new Dimension(BOARD_WIDTH, BOARD_HEIGHT);
     private Timer timer;
     private Game game;
+
+    private int selectedIndex = MENU_START;
+    private boolean showingOptions = false;
 
     public TitleScene(Game game) {
         this.game = game;
@@ -89,30 +101,95 @@ public class TitleScene extends JPanel {
 
     private void doDrawing(Graphics g) {
 
+        final Font baseFont = g.getFont();
+
         g.setColor(Color.black);
         g.fillRect(0, 0, d.width, d.height);
 
         g.drawImage(image, 0, -80, d.width, d.height, this);
 
-        if (frame % 60 < 30) {
-            g.setColor(Color.red);
+        if (showingOptions) {
+            drawOptions(g, baseFont);
         } else {
-            g.setColor(Color.white);
+            drawMenu(g, baseFont);
         }
 
-        g.setFont(g.getFont().deriveFont(32f));
-        String text = "Press SPACE to Start";
-        int stringWidth = g.getFontMetrics().stringWidth(text);
-        int x = (d.width - stringWidth) / 2;
-        // int stringHeight = g.getFontMetrics().getAscent();
-        // int y = (d.height + stringHeight) / 2;
-        g.drawString(text, x, 600);
-
         g.setColor(Color.gray);
-        g.setFont(g.getFont().deriveFont(10f));
+        g.setFont(baseFont.deriveFont(10f));
         g.drawString("Game by Chayapol", 10, 650);
 
         Toolkit.getDefaultToolkit().sync();
+    }
+
+    private void drawMenu(Graphics g, Font baseFont) {
+
+        g.setFont(baseFont.deriveFont(Font.BOLD, 28f));
+
+        for (int i = 0; i < MENU_ITEMS.length; i++) {
+
+            String text = MENU_ITEMS[i];
+
+            if (i == selectedIndex) {
+                text = "> " + text + " <";
+                g.setColor(frame % 60 < 30 ? Color.red : Color.white);
+            } else {
+                g.setColor(Color.gray);
+            }
+
+            drawCentered(g, text, MENU_TOP_Y + i * MENU_SPACING);
+        }
+
+        g.setColor(Color.darkGray);
+        g.setFont(baseFont.deriveFont(12f));
+        drawCentered(g, "UP / DOWN to select    ENTER to confirm",
+                MENU_TOP_Y + MENU_ITEMS.length * MENU_SPACING);
+    }
+
+    private void drawOptions(Graphics g, Font baseFont) {
+
+        final int panelWidth = 440;
+        final int panelHeight = 180;
+        final int panelX = (d.width - panelWidth) / 2;
+        final int panelY = 440;
+
+        g.setColor(new Color(0, 0, 0, 210));
+        g.fillRect(panelX, panelY, panelWidth, panelHeight);
+        g.setColor(Color.white);
+        g.drawRect(panelX, panelY, panelWidth, panelHeight);
+
+        g.setFont(baseFont.deriveFont(Font.BOLD, 24f));
+        drawCentered(g, "OPTIONS", panelY + 40);
+
+        float volume = AudioPlayer.getMasterVolume();
+
+        g.setFont(baseFont.deriveFont(16f));
+        g.drawString("VOLUME", panelX + 30, panelY + 85);
+        String percent = Math.round(volume * 100) + "%";
+        g.drawString(percent, panelX + panelWidth - 30 - g.getFontMetrics().stringWidth(percent),
+                panelY + 85);
+
+        final int trackX = panelX + 30;
+        final int trackY = panelY + 100;
+        final int trackWidth = panelWidth - 60;
+        final int trackHeight = 14;
+        final int fillWidth = Math.round(trackWidth * volume);
+
+        g.setColor(Color.darkGray);
+        g.fillRect(trackX, trackY, trackWidth, trackHeight);
+        g.setColor(Color.red);
+        g.fillRect(trackX, trackY, fillWidth, trackHeight);
+        g.setColor(Color.white);
+        g.drawRect(trackX, trackY, trackWidth, trackHeight);
+        g.fillRect(trackX + fillWidth - 2, trackY - 5, 5, trackHeight + 11);
+
+        g.setColor(Color.gray);
+        g.setFont(baseFont.deriveFont(12f));
+        drawCentered(g, "LEFT / RIGHT to adjust    ESC to go back", panelY + panelHeight - 20);
+    }
+
+    private void drawCentered(Graphics g, String text, int y) {
+        int x = (d.width - g.getFontMetrics().stringWidth(text)) / 2;
+        g.drawString(text, x, y);
     }
 
     private void update() {
@@ -132,6 +209,52 @@ public class TitleScene extends JPanel {
         }
     }
 
+    private void handleMenuKey(int key) {
+        switch (key) {
+            case KeyEvent.VK_UP:
+                selectedIndex = (selectedIndex + MENU_ITEMS.length - 1) % MENU_ITEMS.length;
+                break;
+            case KeyEvent.VK_DOWN:
+                selectedIndex = (selectedIndex + 1) % MENU_ITEMS.length;
+                break;
+            case KeyEvent.VK_ENTER:
+            case KeyEvent.VK_SPACE:
+                activateSelection();
+                break;
+        }
+    }
+
+    private void activateSelection() {
+        switch (selectedIndex) {
+            case MENU_START:
+                game.loadScene2();
+                break;
+            case MENU_OPTIONS:
+                showingOptions = true;
+                break;
+            case MENU_EXIT:
+                stop();
+                System.exit(0);
+                break;
+        }
+    }
+
+    private void handleOptionsKey(int key) {
+        switch (key) {
+            case KeyEvent.VK_LEFT:
+                AudioPlayer.setMasterVolume(AudioPlayer.getMasterVolume() - VOLUME_STEP);
+                break;
+            case KeyEvent.VK_RIGHT:
+                AudioPlayer.setMasterVolume(AudioPlayer.getMasterVolume() + VOLUME_STEP);
+                break;
+            case KeyEvent.VK_ESCAPE:
+            case KeyEvent.VK_ENTER:
+            case KeyEvent.VK_SPACE:
+                showingOptions = false;
+                break;
+        }
+    }
+
     private class TAdapter extends KeyAdapter {
 
         @Override
@@ -141,13 +264,11 @@ public class TitleScene extends JPanel {
 
         @Override
         public void keyPressed(KeyEvent e) {
-            System.out.println("Title.keyPressed: " + e.getKeyCode());
-            int key = e.getKeyCode();
-            if (key == KeyEvent.VK_SPACE) {
-                // Load the next scene
-                game.loadScene2();
+            if (showingOptions) {
+                handleOptionsKey(e.getKeyCode());
+            } else {
+                handleMenuKey(e.getKeyCode());
             }
-
         }
     }
 }

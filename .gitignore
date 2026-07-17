@@ -2,7 +2,7 @@
 *.class
 *.md
 !README.md
-
+*.txt
 # macOS junk
 .DS_Store
 
