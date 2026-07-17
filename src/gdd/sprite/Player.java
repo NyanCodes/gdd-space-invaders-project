@@ -12,8 +12,11 @@ public class Player extends Sprite {
     private static final int START_Y = BOARD_HEIGHT / 2;
     private int width;
     private int height;
-    private int currentSpeed = 2;
-    private int shotSpeed = 20; // pixels per frame a bullet travels
+    private int currentSpeed = 1;
+    private int shotSpeed = 12; // pixels per frame a bullet travels
+    private int shotCooldown = 120; // frames between shots (2s to start)
+    private int cooldownLeft = 0; // frames until the next shot is allowed
+    private int shieldFrames = 0; // golden shield time left, in frames
 
     private Rectangle bounds = new Rectangle(175,135,17,32);
 
@@ -76,6 +79,39 @@ public class Player extends Sprite {
         return shotSpeed;
     }
 
+    public boolean canShoot() {
+        return cooldownLeft == 0;
+    }
+
+    public void startShotCooldown() {
+        cooldownLeft = shotCooldown;
+    }
+
+    public int getShotCooldown() {
+        return shotCooldown;
+    }
+
+    public int getCooldownLeft() {
+        return cooldownLeft;
+    }
+
+    public int reduceShotCooldown(int frames) {
+        shotCooldown = Math.max(30, shotCooldown - frames); // floor at 0.5s
+        return shotCooldown;
+    }
+
+    public void activateShield(int frames) {
+        shieldFrames = frames;
+    }
+
+    public boolean isShieldActive() {
+        return shieldFrames > 0;
+    }
+
+    public int getShieldFrames() {
+        return shieldFrames;
+    }
+
     // Reset to the start position after losing a life (keeps upgrades).
     public void respawn() {
         setX(START_X);
@@ -85,6 +121,13 @@ public class Player extends Sprite {
     }
 
     public void act() {
+        if (shieldFrames > 0) {
+            shieldFrames--;
+        }
+        if (cooldownLeft > 0) {
+            cooldownLeft--;
+        }
+
         x += dx;
         y += dy;
 

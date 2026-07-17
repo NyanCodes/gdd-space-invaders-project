@@ -37,6 +37,10 @@ public class Global {
     public static final int BOSS_HP = 5; // shots needed to kill a boss
     public static final int[] BOSS_SPAWN_SECONDS = {30, 60}; // add entries to extend
 
+    // Power-ups
+    public static final int SHIELD_DURATION_SECONDS = 10; // golden shield lifetime
+    public static final int TIPBOX_SECONDS = 12; // how long the power-up tip box shows at start
+
     // Audio
     public static final float DEFAULT_VOLUME = 0.50f; // slider position on first launch (0.0 - 1.0)
     public static final float VOLUME_STEP = 0.05f; // options menu slider increment
@@ -52,4 +56,5 @@ public class Global {
     public static final String IMG_EXPLOSION = "src/images/explosion.png";
     public static final String IMG_TITLE = "src/images/title.png";
     public static final String IMG_POWERUP_SPEEDUP = "src/images/powerup-s.png";
+    public static final String IMG_POWERUP_SHIELD = "src/images/shield-mushroom.png";
 }

@@ -5,6 +5,7 @@ import gdd.Game;
 import static gdd.Global.*;
 import gdd.SpawnDetails;
 import gdd.powerup.PowerUp;
+import gdd.powerup.ShieldUp;
 import gdd.powerup.SpeedUp;
 import gdd.sprite.Alien1;
 import gdd.sprite.Boss;
@@ -55,12 +56,18 @@ public class Scene1 extends JPanel {
     private int lives = PLAYER_LIVES;
     private int invincibleFrames = 0; // blink window after a respawn
     private int nextAlienSpawnFrame = 120;
-    private int nextPowerupFrame = 20 * 60;
+    private int nextPowerupFrame = 12 * 60;
     private int bossSpawnIndex = 0;
     private Image lifeIcon; // small vertical (nose-up) ship for the HUD
+    private Image tipIconSpeed; // small power-up icons for the start-of-game tip box
+    private Image tipIconShield;
 
     private boolean inGame = true;
     private String message = "Game Over";
+    // When the end screen appeared. A SPACE still held down from shooting would
+    // otherwise exit the game the instant the player dies.
+    private long gameOverAt = 0;
+    private static final long GAMEOVER_INPUT_LOCKOUT_MS = 700;
 
     private final Dimension d = new Dimension(BOARD_WIDTH, BOARD_HEIGHT);
     private final Random randomizer = new Random();
@@ -125,8 +132,11 @@ public class Scene1 extends JPanel {
         // Horizontal side-scroller: enemies enter from the right edge (x = BOARD_WIDTH)
         // and are spread out vertically by varying y.
         spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 200));
+        spawnMap.put(150, new SpawnDetails("PowerUp-Shield", BOARD_WIDTH, 320));
         spawnMap.put(200, new SpawnDetails("Alien1", BOARD_WIDTH, 200));
         spawnMap.put(300, new SpawnDetails("Alien1", BOARD_WIDTH, 300));
+        spawnMap.put(450, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 420));
+        spawnMap.put(600, new SpawnDetails("PowerUp-Shield", BOARD_WIDTH, 160));
 
         spawnMap.put(400, new SpawnDetails("Alien1", BOARD_WIDTH, 120));
         spawnMap.put(401, new SpawnDetails("Alien1", BOARD_WIDTH, 240));
@@ -187,6 +197,12 @@ public class Scene1 extends JPanel {
         // shot = new Shot();
 
         lifeIcon = createLifeIcon();
+
+        // Small icons for the start-of-game power-up tip box.
+        tipIconSpeed = new ImageIcon(IMG_POWERUP_SPEEDUP).getImage()
+                .getScaledInstance(22, 22, java.awt.Image.SCALE_SMOOTH);
+        tipIconShield = new ImageIcon(IMG_POWERUP_SHIELD).getImage()
+                .getScaledInstance(22, 22, java.awt.Image.SCALE_SMOOTH);
     }
 
     // Small vertical ship icon (nose up) for the lives display: the ship
@@ -327,6 +343,33 @@ public class Scene1 extends JPanel {
 
             g.drawImage(player.getImage(), player.getX(), player.getY(), this);
         }
+
+        // Golden shield circle while the shield power-up is active; blinks
+        // during the last 2 seconds as a running-out warning.
+        if (player.isVisible() && player.isShieldActive()) {
+            int left = player.getShieldFrames();
+            boolean warnHidden = left < 120 && (left / 6) % 2 == 0;
+            if (!warnHidden) {
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                int cx = player.getX() + player.getWidth() / 2;
+                int cy = player.getY() + player.getHeight() / 2;
+                int r = Math.max(player.getWidth(), player.getHeight()) / 2 + 10;
+
+                g2.setColor(new Color(255, 215, 0, 40)); // soft golden glow
+                g2.fillOval(cx - r, cy - r, r * 2, r * 2);
+                var oldStroke = g2.getStroke();
+                g2.setStroke(new java.awt.BasicStroke(3f));
+                g2.setColor(new Color(255, 200, 40, 220));
+                g2.drawOval(cx - r, cy - r, r * 2, r * 2);
+                g2.setStroke(oldStroke);
+
+                // Seconds remaining, just above the circle.
+                g2.setFont(new Font("Monospaced", Font.BOLD, 12));
+                g2.drawString((left / 60 + 1) + "s", cx - 6, cy - r - 4);
+            }
+        }
     }
 
     private void drawShot(Graphics g) {
@@ -388,6 +431,7 @@ public class Scene1 extends JPanel {
             drawPlayer(g);
             drawShot(g);
             drawBossHpBars(g);
+            drawTipBox(g);      // power-up guide, shown for the first few seconds
             drawDashboard(g);   // all game status lives in the bottom bar
 
         } else {
@@ -422,6 +466,39 @@ public class Scene1 extends JPanel {
                 g.drawRect(bx, by, barW, barH);
             }
         }
+    }
+
+    // Power-up guide in the top-right corner, visible for the first
+    // TIPBOX_SECONDS of the run so new players know what the drops do.
+    private void drawTipBox(Graphics g) {
+
+        if (frame > TIPBOX_SECONDS * 60) {
+            return;
+        }
+
+        int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
+        int w = 140;
+        int h = 88;
+        int x = panelW - w - 12;
+        int y = 12;
+
+        g.setColor(new Color(4, 12, 24, 210));
+        g.fillRect(x, y, w, h);
+        g.setColor(new Color(255, 200, 40));
+        g.drawRect(x, y, w, h);
+
+        g.setFont(new Font("Monospaced", Font.BOLD, 12));
+        g.setColor(new Color(0, 255, 120));
+        g.drawString("POWER-UPS", x + 10, y + 18);
+
+        int row1 = y + 26;
+        int row2 = y + 54;
+        g.drawImage(tipIconSpeed, x + 10, row1, this);
+        g.drawImage(tipIconShield, x + 10, row2, this);
+
+        g.setColor(Color.white);
+        g.drawString("SPEED UP", x + 40, row1 + 15);
+        g.drawString("SHIELD", x + 40, row2 + 15);
     }
 
     private void drawDashboard(Graphics g) {
@@ -459,8 +536,20 @@ public class Scene1 extends JPanel {
         g.setFont(valueFont);
         g.setColor(Color.white);
         g.drawString(String.valueOf(player.getSpeed()), 140, valueY);
-        g.drawString(String.valueOf(player.getShotSpeed()), 250, valueY);
+        g.drawString(String.format("%d %.1fs", player.getShotSpeed(),
+                player.getShotCooldown() / 60.0), 250, valueY);
         g.drawString(String.valueOf(deaths), 370, valueY);
+
+        // Reload bar under the BULLET value: fills back up between shots.
+        int rbW = 90;
+        int rbH = 4;
+        int rbY = valueY + 6;
+        g.setColor(new Color(30, 45, 60));
+        g.fillRect(250, rbY, rbW, rbH);
+        int ready = rbW * (player.getShotCooldown() - player.getCooldownLeft())
+                / Math.max(1, player.getShotCooldown());
+        g.setColor(player.canShoot() ? new Color(0, 255, 120) : Color.orange);
+        g.fillRect(250, rbY, ready, rbH);
 
         // Flashing boss alert while a boss is on screen.
         boolean bossAlive = false;
@@ -500,6 +589,44 @@ public class Scene1 extends JPanel {
         g.setFont(small);
         g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
                 BOARD_WIDTH / 2);
+
+        drawExitButton(g);
+    }
+
+    // EXIT on the end screen. The timer is stopped by now, so this is drawn
+    // once and can't blink like the title menu — it stays highlighted instead.
+    private void drawExitButton(Graphics g) {
+
+        int bw = 200;
+        int bh = 44;
+        int bx = (BOARD_WIDTH - bw) / 2;
+        int by = BOARD_WIDTH / 2 + 50;
+
+        g.setColor(new Color(0, 32, 48));
+        g.fillRect(bx, by, bw, bh);
+        g.setColor(new Color(255, 200, 40));
+        g.drawRect(bx, by, bw, bh);
+
+        var label = new Font("Helvetica", Font.BOLD, 22);
+        var labelMetrics = this.getFontMetrics(label);
+        String text = "> EXIT <";
+        g.setFont(label);
+        g.setColor(Color.white);
+        g.drawString(text, bx + (bw - labelMetrics.stringWidth(text)) / 2, by + 30);
+
+        var hintFont = new Font("Helvetica", Font.BOLD, 12);
+        var hintMetrics = this.getFontMetrics(hintFont);
+        String hint = "ENTER to exit";
+        g.setFont(hintFont);
+        g.setColor(Color.gray);
+        g.drawString(hint, (BOARD_WIDTH - hintMetrics.stringWidth(hint)) / 2, by + bh + 22);
+    }
+
+    private void endGame(String msg) {
+        inGame = false;
+        timer.stop();
+        message = msg;
+        gameOverAt = System.currentTimeMillis();
     }
 
     private void update() {
@@ -508,9 +635,7 @@ public class Scene1 extends JPanel {
 
         // Stage clear once the full run is survived (5 minutes for now).
         if (frame >= GAME_DURATION_SECONDS * 60) {
-            inGame = false;
-            timer.stop();
-            message = "Stage Clear!";
+            endGame("Stage Clear!");
             return;
         }
 
@@ -534,6 +659,9 @@ public class Scene1 extends JPanel {
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
                     powerups.add(speedUp);
                     break;
+                case "PowerUp-Shield":
+                    powerups.add(new ShieldUp(sd.x, sd.y));
+                    break;
                 default:
                     System.out.println("Unknown enemy type: " + sd.type);
                     break;
@@ -552,11 +680,15 @@ public class Scene1 extends JPanel {
             nextAlienSpawnFrame = frame + gap + randomizer.nextInt(50);
         }
 
-        // A speed-up drop every 25-45 seconds.
+        // A power-up drop every 12-25 seconds, randomly speed or shield.
         if (frame >= nextPowerupFrame) {
             int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
-            powerups.add(new SpeedUp(BOARD_WIDTH, py));
-            nextPowerupFrame = frame + (25 + randomizer.nextInt(20)) * 60;
+            if (randomizer.nextBoolean()) {
+                powerups.add(new SpeedUp(BOARD_WIDTH, py));
+            } else {
+                powerups.add(new ShieldUp(BOARD_WIDTH, py));
+            }
+            nextPowerupFrame = frame + (12 + randomizer.nextInt(14)) * 60;
         }
 
         // Boss schedule — extend by adding entries to BOSS_SPAWN_SECONDS.
@@ -595,10 +727,20 @@ public class Scene1 extends JPanel {
             }
         }
 
-        // Player <-> enemy collision: getting hit costs a life.
-        if (invincibleFrames == 0 && player.isVisible()) {
+        // Player <-> enemy collision: with the golden shield up, ramming an
+        // enemy kills it (and scores it); otherwise getting hit costs a life.
+        if (player.isVisible()) {
             for (Enemy enemy : enemies) {
                 if (enemy.isVisible() && !enemy.isDying() && player.collidesWith(enemy)) {
+                    if (player.isShieldActive()) {
+                        enemy.setDying(true);
+                        explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+                        deaths += (enemy instanceof Boss) ? 5 : 1;
+                        continue;
+                    }
+                    if (invincibleFrames > 0) {
+                        continue; // still blinking after a respawn
+                    }
                     explosions.add(new Explosion(player.getX(), player.getY()));
                     if (!(enemy instanceof Boss)) {
                         // The alien is destroyed in the crash (no score for it).
@@ -608,9 +750,7 @@ public class Scene1 extends JPanel {
                     lives--;
                     if (lives <= 0) {
                         player.die();
-                        inGame = false;
-                        timer.stop();
-                        message = "Game Over";
+                        endGame("Game Over");
                     } else {
                         player.respawn();
                         invincibleFrames = 120; // 2s of blinking safety
@@ -753,6 +893,18 @@ public class Scene1 extends JPanel {
         }
     }
 
+    private void handleGameOverKey(int key) {
+
+        if (System.currentTimeMillis() - gameOverAt < GAMEOVER_INPUT_LOCKOUT_MS) {
+            return;
+        }
+
+        if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
+            stop(); // stops the timer and the music
+            System.exit(0);
+        }
+    }
+
     private class TAdapter extends KeyAdapter {
 
         @Override
@@ -764,18 +916,24 @@ public class Scene1 extends JPanel {
         public void keyPressed(KeyEvent e) {
             System.out.println("Scene2.keyPressed: " + e.getKeyCode());
 
+            if (!inGame) {
+                handleGameOverKey(e.getKeyCode());
+                return;
+            }
+
             player.keyPressed(e);
 
             int key = e.getKeyCode();
 
             if (key == KeyEvent.VK_SPACE && inGame) {
                 System.out.println("Shots: " + shots.size());
-                if (shots.size() < 4) {
+                if (shots.size() < 4 && player.canShoot()) {
                     // Fire from the tip of the ship: right edge, vertically centered.
                     int tipX = player.getX() + player.getWidth();
                     int tipY = player.getY() + player.getHeight() / 2;
                     Shot shot = new Shot(tipX, tipY);
                     shots.add(shot);
+                    player.startShotCooldown();
                 }
             }
 

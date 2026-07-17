@@ -32,9 +32,10 @@ public class SpeedUp extends PowerUp {
     }
 
     public void upgrade(Player player) {
-        // Boost both ship movement and bullet speed (capped in Player).
+        // Boost ship movement, bullet speed, and fire rate (all capped in Player).
         player.setSpeed(player.getSpeed() + 1);
         player.setShotSpeed(player.getShotSpeed() + 4);
+        player.reduceShotCooldown(25);
         this.die(); // Remove the power-up after use
     }
 
