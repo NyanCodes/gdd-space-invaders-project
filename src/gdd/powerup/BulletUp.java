@@ -5,13 +5,16 @@ import gdd.ImageUtil;
 import gdd.sprite.Player;
 
 /**
- * Green mushroom: a golden shield that shrugs off enemies for a few seconds.
+ * Blue flower: upgrades the gun to the heavier shot2 bullet.
+ *
+ * The upgrade is permanent for the rest of the run, so Scene1 stops rolling it
+ * as a random drop once the player is holding one.
  */
-public class ShieldUp extends PowerUp {
+public class BulletUp extends PowerUp {
 
-    public ShieldUp(int x, int y) {
+    public BulletUp(int x, int y) {
         super(x, y);
-        setImage(ImageUtil.fit(IMG_POWERUP_SHIELD, POWERUP_SIZE, POWERUP_SIZE));
+        setImage(ImageUtil.fit(IMG_POWERUP_BULLET, POWERUP_SIZE, POWERUP_SIZE));
     }
 
     @Override
@@ -25,7 +28,7 @@ public class ShieldUp extends PowerUp {
 
     @Override
     public void upgrade(Player player) {
-        player.activateShield(SHIELD_DURATION_SECONDS * 60);
+        player.equipBulletFlower();
         this.die(); // Remove the power-up after use
     }
 }

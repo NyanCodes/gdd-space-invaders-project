@@ -1,6 +1,7 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import gdd.ImageUtil;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
@@ -14,10 +15,31 @@ public class Shot extends Sprite {
     // (tipX, tipY) is the tip of the ship: the right edge, vertically centered.
     public Shot(int tipX, int tipY) {
 
-        initShot(tipX, tipY);
+        this(tipX, tipY, false);
     }
 
-    private void initShot(int tipX, int tipY) {
+    /**
+     * powered = the bullet-flower shot: the heavier shot2 sprite. Damage and
+     * travel speed live on the Player, this only picks the artwork.
+     */
+    public Shot(int tipX, int tipY, boolean powered) {
+
+        initShot(tipX, tipY, powered);
+    }
+
+    private void initShot(int tipX, int tipY, boolean powered) {
+
+        Image bullet = powered ? poweredImage() : plainImage();
+        setImage(bullet);
+
+        // Anchor at the ship's tip: left edge at the tip, centered on it vertically.
+        setX(tipX);
+        setY(tipY - bullet.getHeight(null) / 2);
+    }
+
+    // The default bullet is a tiny vertical sprite, so it is scaled up and
+    // then rotated 90 degrees clockwise to point to the right.
+    private Image plainImage() {
 
         var ii = new ImageIcon(IMG_SHOT);
         int sw = ii.getIconWidth() * SCALE_FACTOR;
@@ -27,7 +49,6 @@ public class Shot extends Sprite {
         Image scaled = new ImageIcon(
                 ii.getImage().getScaledInstance(sw, sh, Image.SCALE_SMOOTH)).getImage();
 
-        // Rotate 90 degrees clockwise so the bullet points to the right.
         // A 90-degree rotation swaps width and height.
         BufferedImage rotated = new BufferedImage(sh, sw, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = rotated.createGraphics();
@@ -35,11 +56,12 @@ public class Shot extends Sprite {
         g2.rotate(Math.toRadians(90));
         g2.drawImage(scaled, 0, 0, null);
         g2.dispose();
-        setImage(rotated);
+        return rotated;
+    }
 
-        // Anchor at the ship's tip: left edge at the tip, centered on it vertically.
-        // (rotated image is sh wide and sw tall)
-        setX(tipX);
-        setY(tipY - sw / 2);
+    // shot2 already points sideways, so it only needs trimming and scaling.
+    private Image poweredImage() {
+
+        return ImageUtil.fit(IMG_SHOT2, SHOT2_WIDTH, SHOT2_HEIGHT);
     }
 }

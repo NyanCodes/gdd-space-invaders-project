@@ -51,8 +51,10 @@ public class Boss extends Enemy {
         }
     }
 
-    public void hit() {
-        hp--;
+    // damage is the player's per-bullet damage: 1 normally, 2 with the
+    // bullet flower, so an upgraded gun drops a boss in three hits.
+    public void hit(int damage) {
+        hp = Math.max(0, hp - damage); // never negative, the HP bar reads it
     }
 
     public boolean isDead() {

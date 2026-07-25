@@ -227,7 +227,7 @@ public class TitleScene extends JPanel {
     private void activateSelection() {
         switch (selectedIndex) {
             case MENU_START:
-                game.loadScene2();
+                game.startGame();
                 break;
             case MENU_OPTIONS:
                 showingOptions = true;

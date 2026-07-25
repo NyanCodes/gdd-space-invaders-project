@@ -3,16 +3,22 @@ package gdd.scene;
 import gdd.AudioPlayer;
 import gdd.Game;
 import static gdd.Global.*;
+import gdd.ImageUtil;
 import gdd.SpawnDetails;
+import gdd.Stage;
+import gdd.powerup.BulletUp;
 import gdd.powerup.PowerUp;
 import gdd.powerup.ShieldUp;
 import gdd.powerup.SpeedUp;
 import gdd.sprite.Alien1;
 import gdd.sprite.Boss;
 import gdd.sprite.Enemy;
+import gdd.sprite.EnemyPlane;
+import gdd.sprite.EnemyShot;
 import gdd.sprite.Explosion;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
+import gdd.sprite.Sprite;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -20,6 +26,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
@@ -41,8 +48,9 @@ public class Scene1 extends JPanel {
     private List<Enemy> enemies;
     private List<Explosion> explosions;
     private List<Shot> shots;
+    private List<EnemyShot> enemyShots; // bullets fired by enemy planes
     private Player player;
-    private Image background;
+    private Terrain terrain; // scrolling cave walls, top and bottom
     // private Shot shot;
 
     final int BLOCKHEIGHT = 50;
@@ -52,17 +60,23 @@ public class Scene1 extends JPanel {
 
     private int direction = -1;
     private int deaths = 0; // score: aliens +1, bosses +5
+    private int carriedScore = 0; // score brought in from the previous stage
 
     private int lives = PLAYER_LIVES;
     private int invincibleFrames = 0; // blink window after a respawn
-    private int nextAlienSpawnFrame = 120;
-    private int nextPowerupFrame = 12 * 60;
+    private int nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
+    private int nextPlaneSpawnFrame; // set from the stage in gameInit()
+    private int nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
     private int bossSpawnIndex = 0;
     private Image lifeIcon; // small vertical (nose-up) ship for the HUD
     private Image tipIconSpeed; // small power-up icons for the start-of-game tip box
     private Image tipIconShield;
+    private Image tipIconBullet;
 
     private boolean inGame = true;
+    // Stage cleared but the game continues — the end screen offers NEXT STAGE
+    // instead of EXIT.
+    private boolean awaitingNextStage = false;
     private String message = "Game Over";
     // When the end screen appeared. A SPACE still held down from shooting would
     // otherwise exit the game the instant the player dies.
@@ -74,6 +88,7 @@ public class Scene1 extends JPanel {
 
     private Timer timer;
     private final Game game;
+    private final Stage stage; // map file, length and boss schedule for this level
 
     private int currentRow = -1;
     // TODO load this map from a file
@@ -111,10 +126,24 @@ public class Scene1 extends JPanel {
     private int firstRowToShow;
 
     public Scene1(Game game) {
+        this(game, Stage.ONE);
+    }
+
+    protected Scene1(Game game, Stage stage) {
         this.game = game;
+        this.stage = stage;
         // initBoard();
         // gameInit();
         loadSpawnDetails();
+    }
+
+    /** Score to start this stage with, carried over from the previous one. */
+    public void setCarriedScore(int score) {
+        this.carriedScore = score;
+    }
+
+    public int getScore() {
+        return deaths;
     }
 
     private void initAudio() {
@@ -131,22 +160,16 @@ public class Scene1 extends JPanel {
         // TODO load this from a file
         // Horizontal side-scroller: enemies enter from the right edge (x = BOARD_WIDTH)
         // and are spread out vertically by varying y.
-        spawnMap.put(50, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 200));
-        spawnMap.put(150, new SpawnDetails("PowerUp-Shield", BOARD_WIDTH, 320));
-        spawnMap.put(200, new SpawnDetails("Alien1", BOARD_WIDTH, 200));
-        spawnMap.put(300, new SpawnDetails("Alien1", BOARD_WIDTH, 300));
-        spawnMap.put(450, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 420));
-        spawnMap.put(600, new SpawnDetails("PowerUp-Shield", BOARD_WIDTH, 160));
-
-        spawnMap.put(400, new SpawnDetails("Alien1", BOARD_WIDTH, 120));
-        spawnMap.put(401, new SpawnDetails("Alien1", BOARD_WIDTH, 240));
-        spawnMap.put(402, new SpawnDetails("Alien1", BOARD_WIDTH, 360));
-        spawnMap.put(403, new SpawnDetails("Alien1", BOARD_WIDTH, 480));
-
-        spawnMap.put(500, new SpawnDetails("Alien1", BOARD_WIDTH, 100));
-        spawnMap.put(501, new SpawnDetails("Alien1", BOARD_WIDTH, 250));
-        spawnMap.put(502, new SpawnDetails("Alien1", BOARD_WIDTH, 400));
-        spawnMap.put(503, new SpawnDetails("Alien1", BOARD_WIDTH, 550));
+        //
+        // A calm scripted opening — a handful of aliens to get a feel for
+        // shooting, plus the two power-ups that change how the ship plays.
+        // Everything after this comes from the pressure ramp in update().
+        spawnMap.put(180, new SpawnDetails("Alien1", BOARD_WIDTH, 220));   // 0:03
+        spawnMap.put(420, new SpawnDetails("Alien1", BOARD_WIDTH, 380));   // 0:07
+        spawnMap.put(600, new SpawnDetails("PowerUp-SpeedUp", BOARD_WIDTH, 260)); // 0:10
+        spawnMap.put(900, new SpawnDetails("Alien1", BOARD_WIDTH, 160));   // 0:15
+        spawnMap.put(1200, new SpawnDetails("Alien1", BOARD_WIDTH, 420));  // 0:20
+        spawnMap.put(1500, new SpawnDetails("PowerUp-Bullet", BOARD_WIDTH, 320)); // 0:25
     }
 
     private void initBoard() {
@@ -154,20 +177,29 @@ public class Scene1 extends JPanel {
     }
 
     public void start() {
-        addKeyListener(new TAdapter());
+        // Guard against double-registering if a scene is ever started twice.
+        if (getKeyListeners().length == 0) {
+            addKeyListener(new TAdapter());
+        }
         setFocusable(true);
         requestFocusInWindow();
         setBackground(Color.black);
 
+        // Build the world (player, terrain, sprite lists) BEFORE the game-loop
+        // timer can fire — otherwise the first tick runs update() on a null
+        // player/terrain and the whole loop dies on an NPE.
+        gameInit();
+
         timer = new Timer(1000 / 60, new GameCycle());
         timer.start();
 
-        gameInit();
         initAudio();
     }
 
     public void stop() {
-        timer.stop();
+        if (timer != null) {
+            timer.stop();
+        }
         try {
             if (audioPlayer != null) {
                 audioPlayer.stop();
@@ -183,8 +215,24 @@ public class Scene1 extends JPanel {
         powerups = new ArrayList<>();
         explosions = new ArrayList<>();
         shots = new ArrayList<>();
+        enemyShots = new ArrayList<>();
 
-        background = new ImageIcon(IMG_BACKGROUND).getImage();
+        // Reset run state so a scene can be started more than once.
+        frame = 0;
+        lives = PLAYER_LIVES;
+        deaths = carriedScore;
+        invincibleFrames = 0;
+        bossSpawnIndex = 0;
+        nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
+        // Only stage 1 delays the first plane; stage 2 opens with them.
+        nextPlaneSpawnFrame = stage.firstPlaneFrame;
+        nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
+        inGame = true;
+        awaitingNextStage = false;
+
+        // Walls come from this stage's map file; the seed only matters if the
+        // file is missing (procedural fallback) and for plant placement.
+        terrain = new Terrain(stage.mapPath, randomizer.nextLong());
 
         // for (int i = 0; i < 4; i++) {
         // for (int j = 0; j < 6; j++) {
@@ -199,10 +247,22 @@ public class Scene1 extends JPanel {
         lifeIcon = createLifeIcon();
 
         // Small icons for the start-of-game power-up tip box.
-        tipIconSpeed = new ImageIcon(IMG_POWERUP_SPEEDUP).getImage()
-                .getScaledInstance(22, 22, java.awt.Image.SCALE_SMOOTH);
-        tipIconShield = new ImageIcon(IMG_POWERUP_SHIELD).getImage()
-                .getScaledInstance(22, 22, java.awt.Image.SCALE_SMOOTH);
+        tipIconSpeed = ImageUtil.fit(IMG_POWERUP_SPEEDUP, TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconShield = ImageUtil.fit(IMG_POWERUP_SHIELD, TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconBullet = ImageUtil.fit(IMG_POWERUP_BULLET, TIP_ICON_SIZE, TIP_ICON_SIZE);
+    }
+
+    /**
+     * How hard the game is pushing right now, 0 (a lone alien drifting past)
+     * to 1 (full pressure). Each stage covers its own slice of the run-long
+     * ramp, so difficulty climbs steadily across all seven minutes instead of
+     * resetting when stage 2 starts.
+     */
+    private double pressure() {
+        double stageProgress = Math.min(1.0,
+                (double) frame / (stage.durationSeconds * 60));
+        return stage.pressureStart
+                + (stage.pressureEnd - stage.pressureStart) * stageProgress;
     }
 
     // Small vertical ship icon (nose up) for the lives display: the ship
@@ -221,6 +281,21 @@ public class Scene1 extends JPanel {
         return rotated;
     }
 
+    // A sprite's bounding box shrunk by a margin on every side — used for
+    // wall collisions so brushing a block with transparent pixels is fair.
+    private Rectangle spriteRect(Sprite s, int margin) {
+        return new Rectangle(s.getX() + margin, s.getY() + margin,
+                s.getImage().getWidth(null) - margin * 2,
+                s.getImage().getHeight(null) - margin * 2);
+    }
+
+    // Move a freshly spawned sprite's y into the open corridor at its x,
+    // so nothing materializes inside a cave wall.
+    private void clampIntoGap(Sprite s) {
+        s.setY(terrain.clampToGap(s.getX(), frame, s.getY(),
+                s.getImage().getHeight(null), playfieldBottom()));
+    }
+
     // Top edge of the bottom dashboard; gameplay stays above this line.
     // Uses the real panel height so the bar is never cut off by window insets.
     private int playfieldBottom() {
@@ -231,15 +306,9 @@ public class Scene1 extends JPanel {
         return h - DASHBOARD_HEIGHT;
     }
 
-    private void drawBackground(Graphics g) {
-        if (background == null) {
-            return;
-        }
-        // Scroll the background image right -> left, wrapping seamlessly by
-        // drawing a second copy immediately after the first.
-        int offset = frame % BOARD_WIDTH;
-        g.drawImage(background, -offset, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
-        g.drawImage(background, BOARD_WIDTH - offset, 0, BOARD_WIDTH, BOARD_HEIGHT, this);
+    private void drawTerrain(Graphics g) {
+        int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
+        terrain.draw(g, frame, panelW, playfieldBottom());
     }
 
     private void drawMap(Graphics g) {
@@ -382,6 +451,16 @@ public class Scene1 extends JPanel {
         }
     }
 
+    private void drawEnemyShots(Graphics g) {
+
+        for (EnemyShot bullet : enemyShots) {
+
+            if (bullet.isVisible()) {
+                g.drawImage(bullet.getImage(), bullet.getX(), bullet.getY(), this);
+            }
+        }
+    }
+
     private void drawBombing(Graphics g) {
 
         // for (Enemy e : enemies) {
@@ -424,12 +503,14 @@ public class Scene1 extends JPanel {
 
         if (inGame) {
 
-            drawBackground(g);  // Draw the scrolling background image first
+            drawMap(g);         // scrolling starfield on black, behind everything
+            drawTerrain(g);     // cave walls along the top and bottom
             drawExplosions(g);
             drawPowreUps(g);
             drawAliens(g);
             drawPlayer(g);
             drawShot(g);
+            drawEnemyShots(g);
             drawBossHpBars(g);
             drawTipBox(g);      // power-up guide, shown for the first few seconds
             drawDashboard(g);   // all game status lives in the bottom bar
@@ -477,8 +558,8 @@ public class Scene1 extends JPanel {
         }
 
         int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
-        int w = 140;
-        int h = 88;
+        int w = 150;
+        int h = 116;
         int x = panelW - w - 12;
         int y = 12;
 
@@ -493,12 +574,15 @@ public class Scene1 extends JPanel {
 
         int row1 = y + 26;
         int row2 = y + 54;
+        int row3 = y + 82;
         g.drawImage(tipIconSpeed, x + 10, row1, this);
         g.drawImage(tipIconShield, x + 10, row2, this);
+        g.drawImage(tipIconBullet, x + 10, row3, this);
 
         g.setColor(Color.white);
         g.drawString("SPEED UP", x + 40, row1 + 15);
         g.drawString("SHIELD", x + 40, row2 + 15);
+        g.drawString("BULLET x2", x + 40, row3 + 15);
     }
 
     private void drawDashboard(Graphics g) {
@@ -521,9 +605,24 @@ public class Scene1 extends JPanel {
         g.setFont(labelFont);
         g.setColor(new Color(0, 255, 120));
         g.drawString("LIVES", 14, labelY);
+        g.drawString("HULL", 95, labelY);
         g.drawString("SPEED", 140, labelY);
         g.drawString("BULLET", 250, labelY);
         g.drawString("SCORE", 370, labelY);
+
+        // Bullet-flower badge next to the BULLET label: x2 shots per reload,
+        // x2 damage.
+        if (player.hasBulletFlower()) {
+            g.setColor(new Color(255, 200, 40));
+            g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(),
+                    306, labelY);
+            g.setColor(new Color(0, 255, 120)); // back to the label colour
+        }
+
+        // Stage number, sitting above the timer in the right corner.
+        String stageLabel = "STAGE " + stage.number;
+        FontMetrics lfm = g.getFontMetrics(labelFont);
+        g.drawString(stageLabel, panelW - lfm.stringWidth(stageLabel) - 14, labelY);
 
         // Remaining lives as small vertical ship icons.
         if (lifeIcon != null) {
@@ -531,6 +630,17 @@ public class Scene1 extends JPanel {
             for (int i = 0; i < lives; i++) {
                 g.drawImage(lifeIcon, 14 + i * (iw + 10), labelY + 6, this);
             }
+        }
+
+        // Hull pips: only enemy planes and their bullets drain these, and
+        // emptying them costs one of the lives above.
+        for (int i = 0; i < player.getMaxHull(); i++) {
+            int hx = 95 + i * 18;
+            int hy = valueY - 13;
+            g.setColor(i < player.getHull() ? new Color(0, 255, 120) : new Color(30, 45, 60));
+            g.fillRect(hx, hy, 14, 14);
+            g.setColor(new Color(4, 12, 24));
+            g.drawRect(hx, hy, 14, 14);
         }
 
         g.setFont(valueFont);
@@ -590,12 +700,19 @@ public class Scene1 extends JPanel {
         g.drawString(message, (BOARD_WIDTH - fontMetrics.stringWidth(message)) / 2,
                 BOARD_WIDTH / 2);
 
-        drawExitButton(g);
+        // Running score, so a stage transition shows what carries over.
+        String score = "SCORE " + deaths;
+        g.setColor(new Color(0, 255, 120));
+        g.drawString(score, (BOARD_WIDTH - fontMetrics.stringWidth(score)) / 2,
+                BOARD_WIDTH / 2 + 34);
+
+        drawEndButton(g);
     }
 
-    // EXIT on the end screen. The timer is stopped by now, so this is drawn
-    // once and can't blink like the title menu — it stays highlighted instead.
-    private void drawExitButton(Graphics g) {
+    // The single button on the end screen: NEXT STAGE between levels, EXIT
+    // once the run is over. The timer is stopped by now, so this is drawn once
+    // and can't blink like the title menu — it stays highlighted instead.
+    private void drawEndButton(Graphics g) {
 
         int bw = 200;
         int bh = 44;
@@ -609,17 +726,26 @@ public class Scene1 extends JPanel {
 
         var label = new Font("Helvetica", Font.BOLD, 22);
         var labelMetrics = this.getFontMetrics(label);
-        String text = "> EXIT <";
+        String text = awaitingNextStage ? "> NEXT STAGE <" : "> EXIT <";
         g.setFont(label);
         g.setColor(Color.white);
         g.drawString(text, bx + (bw - labelMetrics.stringWidth(text)) / 2, by + 30);
 
         var hintFont = new Font("Helvetica", Font.BOLD, 12);
         var hintMetrics = this.getFontMetrics(hintFont);
-        String hint = "ENTER to exit";
+        String hint = awaitingNextStage ? "ENTER to continue" : "ENTER to exit";
         g.setFont(hintFont);
         g.setColor(Color.gray);
         g.drawString(hint, (BOARD_WIDTH - hintMetrics.stringWidth(hint)) / 2, by + bh + 22);
+    }
+
+    // Lost a life but the run continues: back to the start position, nudged
+    // into the open corridor so the ship never reappears inside a wall.
+    private void respawnPlayer() {
+        player.respawn();
+        player.setY(terrain.clampToGap(player.getX(), frame, player.getY(),
+                player.getHeight(), playfieldBottom()));
+        invincibleFrames = 120; // 2s of blinking safety
     }
 
     private void endGame(String msg) {
@@ -629,13 +755,76 @@ public class Scene1 extends JPanel {
         gameOverAt = System.currentTimeMillis();
     }
 
+    // One life gone: either the run is over or the ship comes back at the
+    // start position with a full hull and a blink of safety.
+    private void loseLife() {
+        lives--;
+        if (lives <= 0) {
+            player.die();
+            endGame("Game Over");
+        } else {
+            respawnPlayer();
+        }
+    }
+
+    // A hit from a plane or one of its bullets costs a hull point instead of a
+    // whole life. Emptying the hull is what spends the life.
+    private void absorbPlaneHit() {
+        if (player.takeHit()) {
+            loseLife();
+        } else {
+            invincibleFrames = HIT_INVINCIBLE_FRAMES;
+        }
+    }
+
+    // What killing this enemy is worth on the scoreboard.
+    private int scoreFor(Enemy enemy) {
+        if (enemy instanceof Boss) {
+            return BOSS_SCORE;
+        }
+        if (enemy instanceof EnemyPlane) {
+            return PLANE_SCORE;
+        }
+        return ALIEN_SCORE;
+    }
+
+    // Explosions are drawn from their top-left corner, so centre one on a point.
+    private void explodeAt(int cx, int cy) {
+        Explosion boom = new Explosion(cx, cy);
+        explosions.add(boom);
+        boom.setX(cx - boom.getImage().getWidth(null) / 2);
+        boom.setY(cy - boom.getImage().getHeight(null) / 2);
+    }
+
+    /**
+     * One enemy plane from the pool. Plane 1 only ever attacks the player's
+     * front (in from the right edge), plane 2 only the player's back (in from
+     * the left), and plane 3 does either.
+     */
+    private void spawnPlane() {
+
+        EnemyPlane.Type[] types = EnemyPlane.Type.values();
+        EnemyPlane.Type type = types[randomizer.nextInt(types.length)];
+        EnemyPlane.Heading heading = type.pickHeading(randomizer);
+
+        int py = 10 + randomizer.nextInt(Math.max(1, playfieldBottom() - PLANE_SIZE - 20));
+        int px = heading == EnemyPlane.Heading.LEFTWARD
+                ? BOARD_WIDTH + randomizer.nextInt(80)
+                : -PLANE_SIZE - randomizer.nextInt(80);
+
+        EnemyPlane plane = new EnemyPlane(type, heading, px, py);
+        clampIntoGap(plane);
+        enemies.add(plane);
+    }
+
     private void update() {
 
-        int elapsedSeconds = frame / 60;
-
-        // Stage clear once the full run is survived (5 minutes for now).
-        if (frame >= GAME_DURATION_SECONDS * 60) {
-            endGame("Stage Clear!");
+        // Stage clear once this stage's full length is survived.
+        if (frame >= stage.durationSeconds * 60) {
+            awaitingNextStage = !stage.last;
+            endGame(stage.last
+                    ? "All Stages Clear!"
+                    : "Stage " + stage.number + " Clear!");
             return;
         }
 
@@ -647,6 +836,7 @@ public class Scene1 extends JPanel {
             switch (sd.type) {
                 case "Alien1":
                     Enemy enemy = new Alien1(sd.x, sd.y);
+                    clampIntoGap(enemy);
                     enemies.add(enemy);
                     break;
                 // Add more cases for different enemy types if needed
@@ -657,10 +847,18 @@ public class Scene1 extends JPanel {
                 case "PowerUp-SpeedUp":
                     // Handle speed up item spawn
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
+                    clampIntoGap(speedUp);
                     powerups.add(speedUp);
                     break;
                 case "PowerUp-Shield":
-                    powerups.add(new ShieldUp(sd.x, sd.y));
+                    PowerUp shield = new ShieldUp(sd.x, sd.y);
+                    clampIntoGap(shield);
+                    powerups.add(shield);
+                    break;
+                case "PowerUp-Bullet":
+                    PowerUp bullet = new BulletUp(sd.x, sd.y);
+                    clampIntoGap(bullet);
+                    powerups.add(bullet);
                     break;
                 default:
                     System.out.println("Unknown enemy type: " + sd.type);
@@ -668,32 +866,73 @@ public class Scene1 extends JPanel {
             }
         }
 
-        // Random aliens from the front (right edge), 1-2 at a time at random
-        // heights; the gap between waves shrinks every 30s to ramp difficulty.
+        // Random aliens from the front (right edge) at random heights. Both the
+        // size of a wave and how often waves arrive follow the run-long
+        // pressure ramp: one lonely alien every few seconds early on, packs of
+        // two or three barely a second apart by the end of stage 2.
         if (frame >= nextAlienSpawnFrame) {
-            int count = 1 + randomizer.nextInt(2);
+            double p = pressure();
+
+            int count;
+            if (p < 0.25) {
+                count = 1;
+            } else if (p < 0.60) {
+                count = 1 + randomizer.nextInt(2);
+            } else {
+                count = 2 + randomizer.nextInt(2);
+            }
+
             for (int i = 0; i < count; i++) {
                 int ay = 10 + randomizer.nextInt(Math.max(1, playfieldBottom() - 60));
-                enemies.add(new Alien1(BOARD_WIDTH + randomizer.nextInt(80), ay));
+                Alien1 alien = new Alien1(BOARD_WIDTH + randomizer.nextInt(80), ay);
+                clampIntoGap(alien);
+                enemies.add(alien);
             }
-            int gap = Math.max(30, 100 - (elapsedSeconds / 30) * 10);
-            nextAlienSpawnFrame = frame + gap + randomizer.nextInt(50);
+
+            int gap = (int) Math.round(ALIEN_WAVE_GAP_START
+                    - (ALIEN_WAVE_GAP_START - ALIEN_WAVE_GAP_END) * p);
+            nextAlienSpawnFrame = frame + gap
+                    + randomizer.nextInt(ALIEN_WAVE_GAP_JITTER);
         }
 
-        // A power-up drop every 12-25 seconds, randomly speed or shield.
+        // Enemy planes arrive alongside the alien waves but on their own,
+        // slower cadence — they take twice the bullets and shoot back, so one
+        // at a time is plenty. The gap follows the same pressure ramp.
+        if (frame >= nextPlaneSpawnFrame) {
+            spawnPlane();
+
+            int gap = (int) Math.round(PLANE_GAP_START
+                    - (PLANE_GAP_START - PLANE_GAP_END) * pressure());
+            nextPlaneSpawnFrame = frame + gap
+                    + randomizer.nextInt(PLANE_GAP_JITTER);
+        }
+
+        // A power-up drop every POWERUP_MIN..MAX seconds — rare enough to feel
+        // like a find, regular enough that there is always one on the way. The
+        // bullet flower is permanent, so it drops out of the pool once held.
         if (frame >= nextPowerupFrame) {
             int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
-            if (randomizer.nextBoolean()) {
-                powerups.add(new SpeedUp(BOARD_WIDTH, py));
-            } else {
-                powerups.add(new ShieldUp(BOARD_WIDTH, py));
+            PowerUp drop;
+            switch (randomizer.nextInt(player.hasBulletFlower() ? 2 : 3)) {
+                case 0:
+                    drop = new SpeedUp(BOARD_WIDTH, py);
+                    break;
+                case 1:
+                    drop = new ShieldUp(BOARD_WIDTH, py);
+                    break;
+                default:
+                    drop = new BulletUp(BOARD_WIDTH, py);
+                    break;
             }
-            nextPowerupFrame = frame + (12 + randomizer.nextInt(14)) * 60;
+            clampIntoGap(drop);
+            powerups.add(drop);
+            nextPowerupFrame = frame + (POWERUP_MIN_SECONDS
+                    + randomizer.nextInt(POWERUP_MAX_SECONDS - POWERUP_MIN_SECONDS + 1)) * 60;
         }
 
-        // Boss schedule — extend by adding entries to BOSS_SPAWN_SECONDS.
-        if (bossSpawnIndex < BOSS_SPAWN_SECONDS.length
-                && frame == BOSS_SPAWN_SECONDS[bossSpawnIndex] * 60) {
+        // Boss schedule — per stage, timed to land in the map's wide sections.
+        if (bossSpawnIndex < stage.bossSeconds.length
+                && frame == stage.bossSeconds[bossSpawnIndex] * 60) {
             enemies.add(new Boss(BOARD_WIDTH, playfieldBottom() / 2 - 40, playfieldBottom()));
             bossSpawnIndex++;
         }
@@ -727,38 +966,134 @@ public class Scene1 extends JPanel {
             }
         }
 
+        // Planes shoot on the same interval as the player's starting gun,
+        // aimed at wherever the ship is at the moment the trigger is pulled.
+        if (player.isVisible()) {
+            int aimX = player.getX() + player.getWidth() / 2;
+            int aimY = player.getY() + player.getHeight() / 2;
+
+            for (Enemy enemy : enemies) {
+                if (!(enemy instanceof EnemyPlane) || !enemy.isVisible() || enemy.isDying()) {
+                    continue;
+                }
+                EnemyPlane plane = (EnemyPlane) enemy;
+                if (plane.readyToFire()) {
+                    enemyShots.add(new EnemyShot(plane.getMuzzleX(), plane.getMuzzleY(),
+                            aimX, aimY, plane.getHeading().step));
+                    plane.noteFired();
+                }
+            }
+        }
+
+        // Two planes flying into each other — traffic crossing from opposite
+        // edges — bring each other down. Nobody scores for it.
+        for (int i = 0; i < enemies.size(); i++) {
+            Enemy first = enemies.get(i);
+            if (!(first instanceof EnemyPlane) || !first.isVisible() || first.isDying()) {
+                continue;
+            }
+            for (int j = i + 1; j < enemies.size(); j++) {
+                Enemy second = enemies.get(j);
+                if (!(second instanceof EnemyPlane) || !second.isVisible() || second.isDying()) {
+                    continue;
+                }
+                if (first.collidesWith(second)) {
+                    first.setDying(true);
+                    second.setDying(true);
+                    explosions.add(new Explosion(first.getX(), first.getY()));
+                    explosions.add(new Explosion(second.getX(), second.getY()));
+                    break;
+                }
+            }
+        }
+
+        // Walls destroy regular aliens and planes that drift into them (no
+        // score); the boss hovers over the terrain and is exempt.
+        for (Enemy enemy : enemies) {
+            if (enemy.isVisible() && !enemy.isDying() && !(enemy instanceof Boss)
+                    && terrain.collides(spriteRect(enemy, 6), frame, playfieldBottom())) {
+                enemy.setDying(true);
+                explosions.add(new Explosion(enemy.getX(), enemy.getY()));
+            }
+        }
+
         // Player <-> enemy collision: with the golden shield up, ramming an
-        // enemy kills it (and scores it); otherwise getting hit costs a life.
+        // enemy kills it (and scores it). Otherwise a plane costs a hull point
+        // and anything else costs a whole life.
         if (player.isVisible()) {
             for (Enemy enemy : enemies) {
                 if (enemy.isVisible() && !enemy.isDying() && player.collidesWith(enemy)) {
                     if (player.isShieldActive()) {
                         enemy.setDying(true);
                         explosions.add(new Explosion(enemy.getX(), enemy.getY()));
-                        deaths += (enemy instanceof Boss) ? 5 : 1;
+                        deaths += scoreFor(enemy);
                         continue;
                     }
                     if (invincibleFrames > 0) {
-                        continue; // still blinking after a respawn
+                        continue; // still blinking after a respawn or a hit
                     }
                     explosions.add(new Explosion(player.getX(), player.getY()));
                     if (!(enemy instanceof Boss)) {
-                        // The alien is destroyed in the crash (no score for it).
+                        // The alien or plane is destroyed in the crash (no score).
                         enemy.setDying(true);
                         explosions.add(new Explosion(enemy.getX(), enemy.getY()));
                     }
-                    lives--;
-                    if (lives <= 0) {
-                        player.die();
-                        endGame("Game Over");
+                    if (enemy instanceof EnemyPlane) {
+                        absorbPlaneHit();
                     } else {
-                        player.respawn();
-                        invincibleFrames = 120; // 2s of blinking safety
+                        loseLife();
                     }
                     break;
                 }
             }
         }
+
+        // Player <-> wall: crashing into the cave costs a life. The
+        // post-respawn blink protects here too; the golden shield does not.
+        if (inGame && player.isVisible() && invincibleFrames == 0
+                && terrain.collides(spriteRect(player, 8), frame, playfieldBottom())) {
+            explosions.add(new Explosion(player.getX(), player.getY()));
+            loseLife();
+        }
+
+        // Enemy bullets. The golden shield swallows one and then breaks;
+        // otherwise the hit comes off the hull. They splash on the cave walls
+        // the same way the player's shots do.
+        List<EnemyShot> enemyShotsToRemove = new ArrayList<>();
+        for (EnemyShot bullet : enemyShots) {
+
+            if (!bullet.isVisible()) {
+                enemyShotsToRemove.add(bullet);
+                continue;
+            }
+
+            bullet.act();
+
+            if (bullet.isOffscreen()
+                    || terrain.collides(spriteRect(bullet, 1), frame, playfieldBottom())) {
+                bullet.die();
+                enemyShotsToRemove.add(bullet);
+                continue;
+            }
+
+            if (inGame && player.isVisible() && bullet.collidesWith(player)) {
+                bullet.die();
+                enemyShotsToRemove.add(bullet);
+
+                if (player.isShieldActive()) {
+                    player.breakShield();
+                    explodeAt(player.getX() + player.getWidth() / 2,
+                            player.getY() + player.getHeight() / 2);
+                    continue;
+                }
+                if (invincibleFrames > 0) {
+                    continue;
+                }
+                explosions.add(new Explosion(player.getX(), player.getY()));
+                absorbPlaneHit();
+            }
+        }
+        enemyShots.removeAll(enemyShotsToRemove);
 
         // shot
         List<Shot> shotsToRemove = new ArrayList<>();
@@ -773,18 +1108,32 @@ public class Scene1 extends JPanel {
 
                         if (enemy instanceof Boss) {
                             Boss boss = (Boss) enemy;
-                            boss.hit();
+                            boss.hit(player.getShotDamage());
                             if (boss.isDead()) {
                                 boss.setDying(true);
-                                explosions.add(new Explosion(
-                                        boss.getX() + boss.getWidth() / 2 - 18,
-                                        boss.getY() + boss.getHeight() / 2 - 18));
-                                deaths += 5; // bosses are worth 5
+                                explodeAt(boss.getX() + boss.getWidth() / 2,
+                                        boss.getY() + boss.getHeight() / 2);
+                                deaths += scoreFor(boss);
+                            }
+                        } else if (enemy instanceof EnemyPlane) {
+                            // Two default bullets bring a plane down; the
+                            // bullet flower's double damage does it in one.
+                            EnemyPlane plane = (EnemyPlane) enemy;
+                            plane.hit(player.getShotDamage());
+                            if (plane.isDead()) {
+                                plane.setDying(true);
+                                explodeAt(plane.getX() + plane.getWidth() / 2,
+                                        plane.getY() + plane.getHeight() / 2);
+                                deaths += scoreFor(plane);
+                            } else {
+                                // Still flying — a spark at the impact so the
+                                // player can tell the first bullet landed.
+                                explodeAt(shot.getX(), shot.getY());
                             }
                         } else {
                             enemy.setDying(true);
                             explosions.add(new Explosion(enemy.getX(), enemy.getY()));
-                            deaths++;
+                            deaths += scoreFor(enemy);
                         }
                         shot.die();
                         shotsToRemove.add(shot);
@@ -802,13 +1151,18 @@ public class Scene1 extends JPanel {
                         shotsToRemove.add(shot);
                     } else {
                         shot.setX(newX);
+                        // Bullets splash against the cave walls.
+                        if (terrain.collides(spriteRect(shot, 2), frame, playfieldBottom())) {
+                            shot.die();
+                            shotsToRemove.add(shot);
+                        }
                     }
                 }
             }
         }
         shots.removeAll(shotsToRemove);
 
-        // Drop fully dead enemies so the list stays small over a 5-minute run.
+        // Drop fully dead enemies so the list stays small over a 7-minute run.
         enemies.removeIf(e -> !e.isVisible());
 
         // enemies
@@ -900,6 +1254,10 @@ public class Scene1 extends JPanel {
         }
 
         if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
+            if (awaitingNextStage) {
+                game.loadNextStage(stage.number + 1, deaths);
+                return;
+            }
             stop(); // stops the timer and the music
             System.exit(0);
         }
@@ -931,7 +1289,7 @@ public class Scene1 extends JPanel {
                     // Fire from the tip of the ship: right edge, vertically centered.
                     int tipX = player.getX() + player.getWidth();
                     int tipY = player.getY() + player.getHeight() / 2;
-                    Shot shot = new Shot(tipX, tipY);
+                    Shot shot = new Shot(tipX, tipY, player.hasBulletFlower());
                     shots.add(shot);
                     player.startShotCooldown();
                 }
