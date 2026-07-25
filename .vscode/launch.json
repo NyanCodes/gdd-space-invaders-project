@@ -1,23 +1,21 @@
 {
     // Run config for the Space Invaders game.
+    //
     // The game loads assets by paths relative to the project root
     // (e.g. "src/images/ship1.png"), so the working directory (cwd) MUST be
-    // the project root or images/audio silently fail to load.
+    // the project root or images, audio and the terrain maps silently fail to
+    // load — the game still starts, it just comes up blank.
+    //
+    // "projectName" is deliberately omitted: it has to match the name VS Code
+    // gives the imported project, which varies per machine and per clone
+    // folder, so pinning it here breaks the config for everyone else.
     "version": "0.2.0",
     "configurations": [
-        {
-            "type": "java",
-            "name": "Main",
-            "request": "launch",
-            "mainClass": "gdd.Main",
-            "projectName": "gdd-space-invaders-project_c43775c1"
-        },
         {
             "type": "java",
             "name": "Run Space Invaders",
             "request": "launch",
             "mainClass": "gdd.Main",
-            "projectName": "gdd-space-invaders-project",
             "cwd": "${workspaceFolder}"
         }
     ]
