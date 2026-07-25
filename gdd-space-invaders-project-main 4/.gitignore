@@ -1,0 +1,19 @@
+# Build artifacts
+*.jar
+*.class
+
+# Local working notes (CLAUDE.md, fix_report.md, update_features.md, todo.txt)
+*.md
+!README.md
+*.txt
+# ...but the terrain maps are game data the build needs, not notes. Without
+# these a fresh clone falls back to Terrain's procedural walls and the stage
+# lengths and boss timings no longer line up with the level.
+!src/maps/*.txt
+
+# macOS junk
+.DS_Store
+
+# Dev-tool output (SpriteSlicer)
+src/images/sprites_out_test/
+src/images/sprites_out/
