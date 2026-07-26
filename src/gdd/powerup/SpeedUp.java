@@ -4,18 +4,16 @@ import static gdd.Global.*;
 import gdd.ImageUtil;
 import gdd.sprite.Player;
 
-/**
- * Red mushroom: makes the ship quicker in every way.
- */
 public class SpeedUp extends PowerUp {
 
     public SpeedUp(int x, int y) {
         super(x, y);
-        setImage(ImageUtil.fit(IMG_POWERUP_SPEEDUP, POWERUP_SIZE, POWERUP_SIZE));
+        loadFrames(IMG_POWERUP_SPEEDUP, POWERUP_SIZE, POWERUP_SIZE);
     }
 
     @Override
     public void act() {
+        updateAnimation();
         // Horizontal side-scroller: drift left from the right edge so the
         // player can fly into it.
         this.x -= POWERUP_DRIFT_SPEED;

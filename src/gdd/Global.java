@@ -36,7 +36,7 @@ public class Global {
 
     // The ship's starting gun and engine. Enemy planes fire on the same
     // interval, so these are the single source for "the player's default".
-    public static final int PLAYER_SPEED = 2; // px per frame; ~120 px/s
+    public static final int PLAYER_SPEED = 5; // px per frame; ~120 px/s
     public static final int PLAYER_SHOT_SPEED = 20; // px per frame a bullet travels
     public static final int PLAYER_SHOT_COOLDOWN = 90; // frames between shots (1.5s)
 
@@ -127,6 +127,11 @@ public class Global {
 
     // Images
     public static final String IMG_ENEMY = "src/images/alien.png";
+    public static final String IMG_Boss[] = {
+        "src/images/Boss1.png", 
+        "src/images/Boss2.png"
+    };
+    
     // Baked from the MagicaVoxel models in src/images/Plane 0*. All three are
     // drawn nose-left; ImageUtil.mirror flips the ones flying the other way.
     public static final String IMG_PLANE_1 = "src/images/plane1.png";
@@ -137,7 +142,97 @@ public class Global {
     public static final String IMG_SHOT2 = "src/images/shot2.png"; // bullet-flower bullet
     public static final String IMG_EXPLOSION = "src/images/explosion.png";
     public static final String IMG_TITLE = "src/images/title.png";
-    public static final String IMG_POWERUP_SPEEDUP = "src/images/speed-up-mushroom.png";
-    public static final String IMG_POWERUP_SHIELD = "src/images/shield-mushroom.png";
-    public static final String IMG_POWERUP_BULLET = "src/images/bullet-flower.png";
+
+    //powerups spinning frames
+    public static final String IMG_POWERUP_SPEEDUP[] = {
+        "src/images/powerUps/speed/speed1.png",
+        "src/images/powerUps/speed/speed2.png",
+        "src/images/powerUps/speed/speed3.png",
+        "src/images/powerUps/speed/speed4.png",
+        "src/images/powerUps/speed/speed5.png",
+        "src/images/powerUps/speed/speed6.png",
+        "src/images/powerUps/speed/speed7.png",
+        "src/images/powerUps/speed/speed8.png",
+        "src/images/powerUps/speed/speed9.png",
+        "src/images/powerUps/speed/speed10.png",
+        "src/images/powerUps/speed/speed11.png",
+        "src/images/powerUps/speed/speed12.png",
+        "src/images/powerUps/speed/speed13.png",
+        "src/images/powerUps/speed/speed14.png",
+        "src/images/powerUps/speed/speed15.png",
+        "src/images/powerUps/speed/speed16.png",
+    };
+
+    public static final String IMG_POWERUP_SHIELD[] = {
+        "src/images/powerUps/shield/shield1.png",
+        "src/images/powerUps/shield/shield2.png",
+        "src/images/powerUps/shield/shield3.png",
+        "src/images/powerUps/shield/shield4.png",
+        "src/images/powerUps/shield/shield5.png",
+        "src/images/powerUps/shield/shield6.png",
+        "src/images/powerUps/shield/shield7.png",
+        "src/images/powerUps/shield/shield8.png",
+        "src/images/powerUps/shield/shield9.png",
+        "src/images/powerUps/shield/shield10.png",
+        "src/images/powerUps/shield/shield11.png",
+        "src/images/powerUps/shield/shield12.png",
+        "src/images/powerUps/shield/shield13.png",
+        "src/images/powerUps/shield/shield14.png",
+        "src/images/powerUps/shield/shield15.png",
+        "src/images/powerUps/shield/shield16.png",
+    };
+
+    public static final String IMG_POWERUP_BULLET[] = {
+        "src/images/powerUps/shots/shot1.png",
+        "src/images/powerUps/shots/shot2.png",
+        "src/images/powerUps/shots/shot3.png",
+        "src/images/powerUps/shots/shot4.png",
+        "src/images/powerUps/shots/shot5.png",
+        "src/images/powerUps/shots/shot6.png",
+        "src/images/powerUps/shots/shot7.png",
+        "src/images/powerUps/shots/shot8.png",
+        "src/images/powerUps/shots/shot9.png",
+        "src/images/powerUps/shots/shot10.png",
+        "src/images/powerUps/shots/shot11.png",
+        "src/images/powerUps/shots/shot12.png",
+        "src/images/powerUps/shots/shot13.png",
+        "src/images/powerUps/shots/shot14.png",
+        "src/images/powerUps/shots/shot15.png",
+        "src/images/powerUps/shots/shot16.png",
+    };
+
+    //new Shots
+    public static final String IMG_bolt[] = {
+        "src/images/shots/bolt1.png",
+        "src/images/shots/bolt2.png",
+        "src/images/shots/bolt3.png",
+        "src/images/shots/bolt4.png",
+    };
+
+    public static final String IMG_charge[] = {
+        "src/images/shots/charged1.png",
+        "src/images/shots/charged2.png",
+        "src/images/shots/charged3.png",
+        "src/images/shots/charged4.png",
+        "src/images/shots/charged5.png",
+        "src/images/shots/charged6.png",
+    };
+    //Added Sprites
+    public static final String[] IMG_EXPLOSIONS_Frames = {
+        "src/images/Explosion_sprites/hits-2-1.png",
+        "src/images/Explosion_sprites/hits-2-2.png",
+        "src/images/Explosion_sprites/hits-2-3.png",
+        "src/images/Explosion_sprites/hits-2-4.png",
+        "src/images/Explosion_sprites/hits-2-5.png",
+        "src/images/Explosion_sprites/hits-2-6.png",
+        "src/images/Explosion_sprites/hits-2-7.png",
+    };
+
+    //Audiio Paths
+    public static final String Explosion_sfx = "src/audio/Explosion.wav";
+    public static final String GameOver_sfx = "src/audio/Fallen in Battle.wav";
+    public static final String Victory_sfx = "src/audio/Victory! All Clear.wav";
+    public static final String Title_sfx = "src/audio/Title Theme.wav";
+    public static final String Stage1_sfx = "src/audio/Fields of Ice.wav";
+    public static final String Stage2_sfx = "src/audio/Zero Respect.wav";
 }

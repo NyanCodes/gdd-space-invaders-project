@@ -28,11 +28,11 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
-import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -148,7 +148,7 @@ public class Scene1 extends JPanel {
 
     private void initAudio() {
         try {
-            String filePath = "src/audio/scene1.wav";
+            String filePath = (stage.number == 1) ? Stage1_sfx : Stage2_sfx;
             audioPlayer = new AudioPlayer(filePath);
             audioPlayer.play();
         } catch (Exception e) {
@@ -247,9 +247,9 @@ public class Scene1 extends JPanel {
         lifeIcon = createLifeIcon();
 
         // Small icons for the start-of-game power-up tip box.
-        tipIconSpeed = ImageUtil.fit(IMG_POWERUP_SPEEDUP, TIP_ICON_SIZE, TIP_ICON_SIZE);
-        tipIconShield = ImageUtil.fit(IMG_POWERUP_SHIELD, TIP_ICON_SIZE, TIP_ICON_SIZE);
-        tipIconBullet = ImageUtil.fit(IMG_POWERUP_BULLET, TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconSpeed = ImageUtil.fit(IMG_POWERUP_SPEEDUP[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconShield = ImageUtil.fit(IMG_POWERUP_SHIELD[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconBullet = ImageUtil.fit(IMG_POWERUP_BULLET[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
     }
 
     /**
@@ -381,8 +381,14 @@ public class Scene1 extends JPanel {
             }
 
             if (enemy.isDying()) {
-
+                explodeAt(enemy.getX() + 2, enemy.getY() + 2);
                 enemy.die();
+                try {
+                    audioPlayer = new AudioPlayer(Explosion_sfx);
+                    audioPlayer.playOnce();
+                } catch (Exception e) {
+                    System.err.println("Error initializing audio player: " + e.getMessage());
+                }
             }
         }
     }
@@ -478,9 +484,12 @@ public class Scene1 extends JPanel {
         for (Explosion explosion : explosions) {
 
             if (explosion.isVisible()) {
+
+                explosion.act(0);
+
                 g.drawImage(explosion.getImage(), explosion.getX(), explosion.getY(), this);
                 explosion.visibleCountDown();
-                if (!explosion.isVisible()) {
+                if (explosion.isFinished()) {
                     toRemove.add(explosion);
                 }
             }
@@ -585,102 +594,113 @@ public class Scene1 extends JPanel {
         g.drawString("BULLET x2", x + 40, row3 + 15);
     }
 
-    private void drawDashboard(Graphics g) {
+private void drawDashboard(Graphics g) {
 
-        int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
-        int top = playfieldBottom();
+		int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
+		int top = playfieldBottom();
 
-        // Dark space panel with a green scanline on top — matches the
-        // black/green/white arcade look of the rest of the game.
-        g.setColor(new Color(4, 12, 24));
-        g.fillRect(0, top, panelW, DASHBOARD_HEIGHT);
-        g.setColor(new Color(0, 255, 120));
-        g.fillRect(0, top, panelW, 2);
+		// Dark space panel with a green scanline on top
+		g.setColor(new Color(4, 12, 24));
+		g.fillRect(0, top, panelW, DASHBOARD_HEIGHT);
+		g.setColor(new Color(0, 255, 120));
+		g.fillRect(0, top, panelW, 2);
 
-        Font labelFont = new Font("Monospaced", Font.BOLD, 12);
-        Font valueFont = new Font("Monospaced", Font.BOLD, 16);
-        int labelY = top + 20;
-        int valueY = top + 44;
+		Font labelFont = new Font("Monospaced", Font.BOLD, 12);
+		Font valueFont = new Font("Monospaced", Font.BOLD, 16);
+		int labelY = top + 18;
+		int valueY = top + 42;
 
-        g.setFont(labelFont);
-        g.setColor(new Color(0, 255, 120));
-        g.drawString("LIVES", 14, labelY);
-        g.drawString("HULL", 95, labelY);
-        g.drawString("SPEED", 140, labelY);
-        g.drawString("BULLET", 250, labelY);
-        g.drawString("SCORE", 370, labelY);
+		// --- HUD LABELS ---
+		g.setFont(labelFont);
+		g.setColor(new Color(0, 255, 120));
+		g.drawString("LIVES", 14, labelY);
+		g.drawString("HULL", 95, labelY);
+		g.drawString("SPEED", 185, labelY);
+		g.drawString("RELOAD", 260, labelY); // Renamed from BULLET for clarity
+		g.drawString("SCORE", 370, labelY);
 
-        // Bullet-flower badge next to the BULLET label: x2 shots per reload,
-        // x2 damage.
-        if (player.hasBulletFlower()) {
-            g.setColor(new Color(255, 200, 40));
-            g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(),
-                    306, labelY);
-            g.setColor(new Color(0, 255, 120)); // back to the label colour
-        }
+		// Bullet-flower badge next to the RELOAD label
+		if (player.hasBulletFlower()) {
+			g.setColor(new Color(255, 200, 40));
+			g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(), 315, labelY);
+			g.setColor(new Color(0, 255, 120)); 
+		}
 
-        // Stage number, sitting above the timer in the right corner.
-        String stageLabel = "STAGE " + stage.number;
-        FontMetrics lfm = g.getFontMetrics(labelFont);
-        g.drawString(stageLabel, panelW - lfm.stringWidth(stageLabel) - 14, labelY);
+		// Stage number, sitting above the timer in the right corner
+		String stageLabel = "STAGE " + stage.number;
+		FontMetrics lfm = g.getFontMetrics(labelFont);
+		g.drawString(stageLabel, panelW - lfm.stringWidth(stageLabel) - 14, labelY);
 
-        // Remaining lives as small vertical ship icons.
-        if (lifeIcon != null) {
-            int iw = lifeIcon.getWidth(null);
-            for (int i = 0; i < lives; i++) {
-                g.drawImage(lifeIcon, 14 + i * (iw + 10), labelY + 6, this);
-            }
-        }
+		// --- LIVES ---
+		if (lifeIcon != null) {
+			int iw = lifeIcon.getWidth(null);
+			for (int i = 0; i < lives; i++) {
+				g.drawImage(lifeIcon, 14 + i * (iw + 8), labelY + 6, this);
+			}
+		}
 
-        // Hull pips: only enemy planes and their bullets drain these, and
-        // emptying them costs one of the lives above.
-        for (int i = 0; i < player.getMaxHull(); i++) {
-            int hx = 95 + i * 18;
-            int hy = valueY - 13;
-            g.setColor(i < player.getHull() ? new Color(0, 255, 120) : new Color(30, 45, 60));
-            g.fillRect(hx, hy, 14, 14);
-            g.setColor(new Color(4, 12, 24));
-            g.drawRect(hx, hy, 14, 14);
-        }
+		// --- HULL PIPS ---
+		for (int i = 0; i < player.getMaxHull(); i++) {
+			int hx = 95 + i * 16;
+			int hy = valueY - 12;
+			g.setColor(i < player.getHull() ? new Color(0, 255, 120) : new Color(20, 35, 50));
+			g.fillRect(hx, hy, 12, 12);
+			g.setColor(new Color(4, 12, 24));
+			g.drawRect(hx, hy, 12, 12);
+		}
 
-        g.setFont(valueFont);
-        g.setColor(Color.white);
-        g.drawString(String.valueOf(player.getSpeed()), 140, valueY);
-        g.drawString(String.format("%d %.1fs", player.getShotSpeed(),
-                player.getShotCooldown() / 60.0), 250, valueY);
-        g.drawString(String.valueOf(deaths), 370, valueY);
+		// --- SPEED & SCORE ---
+		g.setFont(valueFont);
+		g.setColor(Color.white);
+		g.drawString(String.valueOf(player.getSpeed()), 185, valueY);
+		g.drawString(String.valueOf(deaths), 370, valueY);
 
-        // Reload bar under the BULLET value: fills back up between shots.
-        int rbW = 90;
-        int rbH = 4;
-        int rbY = valueY + 6;
-        g.setColor(new Color(30, 45, 60));
-        g.fillRect(250, rbY, rbW, rbH);
-        int ready = rbW * (player.getShotCooldown() - player.getCooldownLeft())
-                / Math.max(1, player.getShotCooldown());
-        g.setColor(player.canShoot() ? new Color(0, 255, 120) : Color.orange);
-        g.fillRect(250, rbY, ready, rbH);
+		// --- ENHANCED RELOAD BAR ---
+		int rbW = 95;
+		int rbH = 10; // Taller bar for better presentation
+		int rbX = 260;
+		int rbY = valueY - 10;
 
-        // Flashing boss alert while a boss is on screen.
-        boolean bossAlive = false;
-        for (Enemy enemy : enemies) {
-            if (enemy instanceof Boss && enemy.isVisible() && !enemy.isDying()) {
-                bossAlive = true;
-                break;
-            }
-        }
-        if (bossAlive && (frame / 20) % 2 == 0) {
-            g.setColor(Color.red);
-            g.drawString("!! BOSS !!", 460, valueY);
-        }
+		// Background track & Border
+		g.setColor(new Color(15, 25, 40));
+		g.fillRect(rbX, rbY, rbW, rbH);
+		g.setColor(new Color(0, 180, 80));
+		g.drawRect(rbX, rbY, rbW, rbH);
 
-        // Game timer, bottom-right corner.
-        int seconds = frame / 60;
-        String time = String.format("TIME %02d:%02d", seconds / 60, seconds % 60);
-        FontMetrics fm = g.getFontMetrics(valueFont);
-        g.setColor(new Color(0, 255, 120));
-        g.drawString(time, panelW - fm.stringWidth(time) - 14, valueY);
-    }
+		// Progress Calculation
+		int cdTotal = Math.max(1, player.getShotCooldown());
+		int cdLeft = player.getCooldownLeft();
+		int readyWidth = (int) ((rbW - 2) * ((double) (cdTotal - cdLeft) / cdTotal));
+		readyWidth = Math.max(0, Math.min(rbW - 2, readyWidth));
+
+		// Fill Color: Green when ready to shoot, orange/yellow while recharging
+		if (player.canShoot()) {
+			g.setColor(new Color(0, 255, 120));
+		} else {
+			g.setColor(new Color(255, 170, 0));
+		}
+		g.fillRect(rbX + 1, rbY + 1, readyWidth, rbH - 1);
+
+		// --- FLASHING BOSS ALERT ---
+		boolean bossAlive = false;
+		for (Enemy enemy : enemies) {
+			if (enemy instanceof Boss && enemy.isVisible() && !enemy.isDying()) {
+				bossAlive = true;
+				break;
+			}
+		}
+		if (bossAlive && (frame / 20) % 2 == 0) {
+			g.setColor(Color.red);
+			g.drawString("!! BOSS !!", 470, valueY);
+		}
+
+		// --- GAME TIMER ---
+		int seconds = frame / 60;
+		String time = String.format("TIME %02d:%02d", seconds / 60, seconds % 60);
+		FontMetrics fm = g.getFontMetrics(valueFont);
+		g.setColor(new Color(0, 255, 120));
+		g.drawString(time, panelW - fm.stringWidth(time) - 14, valueY);
+	}
 
     private void gameOver(Graphics g) {
 
@@ -749,6 +769,12 @@ public class Scene1 extends JPanel {
     }
 
     private void endGame(String msg) {
+        try {
+            audioPlayer = new AudioPlayer(GameOver_sfx);
+            audioPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Error initializing audio player: " + e.getMessage());
+        }
         inGame = false;
         timer.stop();
         message = msg;
@@ -764,6 +790,12 @@ public class Scene1 extends JPanel {
             endGame("Game Over");
         } else {
             respawnPlayer();
+        }
+        try {
+            audioPlayer = new AudioPlayer(Explosion_sfx);
+            audioPlayer.playOnce();
+        } catch (Exception e) {
+            System.err.println("Error initializing audio player: " + e.getMessage());
         }
     }
 
