@@ -14,6 +14,7 @@ import gdd.powerup.ShieldUp;
 import gdd.powerup.SpeedUp;
 import gdd.sprite.Alien1;
 import gdd.sprite.Boss;
+import gdd.sprite.BossShot;
 import gdd.sprite.Enemy;
 import gdd.sprite.EnemyPlane;
 import gdd.sprite.EnemyShot;
@@ -266,6 +267,13 @@ public class Scene1 extends JPanel {
         // }
         // }
         player = new Player();
+        // Each stage is entered on a known footing rather than inheriting the
+        // gun: stage 2 starts on the 2x flower, which is what its heavy planes
+        // are balanced against.
+        player.equipGun(stage.startingGun);
+        // Anything the starting gun already answers counts as met, or the
+        // ladder would offer a rung the player is holding.
+        seenPlaneTier = stage.startingGun.unlockPlaneTier;
         // shot = new Shot();
 
         lifeIcon = createLifeIcon();
@@ -874,9 +882,10 @@ private void drawDashboard(Graphics g) {
         }
     }
 
-    // A hit from a plane or one of its bullets costs a hull point instead of a
-    // whole life. Emptying the hull is what spends the life.
-    private void absorbPlaneHit() {
+    // Enemy fire — a plane, its bullets, or a boss bullet — costs a hull point
+    // instead of a whole life. Emptying the hull is what spends the life.
+    // Ramming an alien, a boss or a wall still costs a life outright.
+    private void absorbHullHit() {
         if (player.takeHit()) {
             loseLife();
         } else {
@@ -933,17 +942,18 @@ private void drawDashboard(Graphics g) {
     }
 
     /**
-     * How far up the plane escalation this stage has got right now.
-     *
-     * Everything an earlier stage already unlocked is in the air from the
-     * first frame — otherwise every stage change would quietly roll the enemy
-     * roster back to light traffic. This stage's own new model joins
-     * HEAVY_PLANE_FRAME in, which is the "after a minute" beat.
+     * How far up the plane escalation this stage has got right now — the
+     * highest tier whose unlock frame has passed. A stage never fields a tier
+     * its schedule has no entry for.
      */
     private int planeTierCap() {
-        return frame >= HEAVY_PLANE_FRAME
-                ? stage.maxPlaneTier
-                : stage.maxPlaneTier - 1;
+        int cap = 0;
+        for (int tier = 1; tier < stage.planeTierFrames.length; tier++) {
+            if (frame >= stage.planeTierFrames[tier]) {
+                cap = tier;
+            }
+        }
+        return cap;
     }
 
     /**
@@ -1124,7 +1134,7 @@ private void drawDashboard(Graphics g) {
         // here the cave stops scrolling and the stage ends when the boss dies.
         if (!bossSpawned && frame >= stage.bossSecond * 60) {
             enemies.add(new Boss(BOARD_WIDTH, playfieldBottom() / 2 - 40,
-                    playfieldBottom(), stage.number));
+                    playfieldBottom(), stage));
             bossSpawned = true;
         }
 
@@ -1176,14 +1186,28 @@ private void drawDashboard(Graphics g) {
             int aimY = player.getY() + player.getHeight() / 2;
 
             for (Enemy enemy : enemies) {
-                if (!(enemy instanceof EnemyPlane) || !enemy.isVisible() || enemy.isDying()) {
+                if (!enemy.isVisible() || enemy.isDying()) {
                     continue;
                 }
-                EnemyPlane plane = (EnemyPlane) enemy;
-                if (plane.readyToFire()) {
-                    enemyShots.add(new EnemyShot(plane.getMuzzleX(), plane.getMuzzleY(),
-                            aimX, aimY, plane.getHeading().step));
-                    plane.noteFired();
+                if (enemy instanceof EnemyPlane) {
+                    EnemyPlane plane = (EnemyPlane) enemy;
+                    if (plane.readyToFire()) {
+                        enemyShots.add(new EnemyShot(plane.getMuzzleX(), plane.getMuzzleY(),
+                                aimX, aimY, plane.getHeading().step));
+                        plane.noteFired();
+                    }
+                } else if (enemy instanceof Boss) {
+                    // One volley, aimed at the ship: a single fast bullet in
+                    // stage 1, a fan of them in stage 2. Every bullet of a
+                    // volley shares the aim point taken at the trigger pull.
+                    Boss boss = (Boss) enemy;
+                    if (boss.readyToFire()) {
+                        for (double offset : boss.volleyAngles()) {
+                            enemyShots.add(new BossShot(boss.getMuzzleX(), boss.getMuzzleY(),
+                                    aimX, aimY, offset));
+                        }
+                        boss.noteFired();
+                    }
                 }
             }
         }
@@ -1252,7 +1276,7 @@ private void drawDashboard(Graphics g) {
                         explosions.add(new Explosion(enemy.getX(), enemy.getY()));
                     }
                     if (enemy instanceof EnemyPlane) {
-                        absorbPlaneHit();
+                        absorbHullHit();
                     } else {
                         loseLife();
                     }
@@ -1303,7 +1327,7 @@ private void drawDashboard(Graphics g) {
                     continue;
                 }
                 explosions.add(new Explosion(player.getX(), player.getY()));
-                absorbPlaneHit();
+                absorbHullHit();
             }
         }
         enemyShots.removeAll(enemyShotsToRemove);

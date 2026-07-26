@@ -40,8 +40,9 @@ public class Global {
     public static final int PLAYER_SHOT_SPEED = 20; // px per frame a bullet travels
     public static final int PLAYER_SHOT_COOLDOWN = 90; // frames between shots (1.5s)
 
-    // Hull points. Only enemy planes and their bullets chip away at this — a
-    // cave wall, an alien or a boss still costs a whole life on contact.
+    // Hull points. Enemy fire chips away at this — plane collisions, plane
+    // bullets and boss bullets — while a cave wall, an alien, or ramming the
+    // boss itself still costs a whole life on contact.
     public static final int PLAYER_HULL = 2;
     public static final int HIT_INVINCIBLE_FRAMES = 45; // mercy blink after a plane hit
 
@@ -67,6 +68,16 @@ public class Global {
     // Boss. One per stage, and killing it is what clears the stage — so it is
     // a real fight: 24 default bullets, or 12 with the bullet flower.
     public static final int BOSS_HP = 24;
+    // Boss fire. It shoots on a tighter interval than the planes, and a hit
+    // costs a hull point exactly like plane fire does. Stage 1's boss lobs one
+    // aimed bullet, fast enough that standing still is not an option; stage 2's
+    // fires a three-way spread on the same beat, which is three times the
+    // volume rather than three times the rate.
+    public static final int BOSS_FIRE_COOLDOWN = 60;   // frames between volleys (1s)
+    public static final int BOSS_SHOT_SPEED = 11;      // px per frame, vs PLANE_SHOT_SPEED 7
+    public static final int BOSS_SPREAD_COUNT = 3;     // bullets in a stage 2 volley
+    public static final int BOSS_SPREAD_DEGREES = 45;  // angle between them
+    public static final int BOSS_SHOT_SIZE = 30;       // bullet art fits this box, px
     // A beat between the killing blow and the clear screen, so the player sees
     // the boss go up rather than the screen flipping mid-explosion.
     public static final int STAGE_CLEAR_DELAY_FRAMES = 60; // 1s
@@ -95,9 +106,16 @@ public class Global {
     public static final int HEAVY_PLANE_HULL = 4; // 2 bullet-flower hits
     public static final int ELITE_PLANE_SIZE = 86;
     public static final int ELITE_PLANE_HULL = 8; // 4 bullet-flower hits
-    // A stage's own new plane model joins the traffic one minute in; anything
-    // unlocked by an earlier stage is there from the first frame.
-    public static final int HEAVY_PLANE_FRAME = 60 * 60; // 1:00
+    // When each plane tier joins the traffic, indexed by tier: element 0 is the
+    // light models, 1 the heavy, 2 the elite. A stage simply doesn't field a
+    // tier it has no entry for, so this is both the schedule and the roster.
+    //
+    // Stage 2 inherits stage 1's ending pressure, so opening it at full tilt
+    // made its first minute harder than its boss. It gets a plane-free start,
+    // then light traffic, then heavies, then elites.
+    public static final int[] STAGE_1_PLANE_TIER_FRAMES = {0, 60 * 60};
+    public static final int[] STAGE_2_PLANE_TIER_FRAMES = {0, 30 * 60, 75 * 60};
+    public static final int STAGE_2_FIRST_PLANE_FRAME = 15 * 60; // 0:15
     // How much of the plane traffic the heavier models take. They enter the
     // pool on equal footing and climb to this many times the share of a light
     // plane as the stage's pressure ramp tops out.
@@ -253,6 +271,17 @@ public class Global {
         "src/images/powerUps/shots/shot14.png",
         "src/images/powerUps/shots/shot15.png",
         "src/images/powerUps/shots/shot16.png",
+    };
+
+    // Boss fire: a spinning orb, drawn symmetrically so it reads correctly at
+    // any heading (stage 2's boss fires a spread, not a straight line).
+    public static final String IMG_BOSS_SHOT[] = {
+        "src/images/Boss_shots/crossed1.png",
+        "src/images/Boss_shots/crossed2.png",
+        "src/images/Boss_shots/crossed3.png",
+        "src/images/Boss_shots/crossed4.png",
+        "src/images/Boss_shots/crossed5.png",
+        "src/images/Boss_shots/crossed6.png",
     };
 
     // The extra-life heart, spun about its vertical axis (tools/make_heart_pickup.py).

@@ -1,5 +1,6 @@
 package gdd;
 
+
 /**
  * Everything that differs between one playable stage and the next.
  *
@@ -26,11 +27,19 @@ public class Stage {
     // edges. This gates the model pool too — the rear-only plane 2 simply does
     // not appear in stage 1.
     public final boolean planesFromBehind;
-    // The toughest plane model this stage fields (see EnemyPlane.Type.tier):
-    // stage 1 tops out at the heavy, stage 2 adds the elite. A stage's own new
-    // model joins one minute in (Global.HEAVY_PLANE_FRAME); everything an
-    // earlier stage already unlocked is in the air from the first frame.
-    public final int maxPlaneTier;
+    // When each plane tier (see EnemyPlane.Type.tier) starts flying in this
+    // stage, indexed by tier. Its length is also the roster: a stage with two
+    // entries never fields an elite at all. Stage 1 is light traffic then
+    // heavies; stage 2 adds elites on top, each rung a while after the last.
+    public final int[] planeTierFrames;
+    // The gun the player starts this stage holding. Upgrades are not carried
+    // between stages — each stage is entered on a known footing — so stage 2
+    // opens on the 2x flower and climbs to 4x and 6x from there.
+    public final GunTier startingGun;
+    // Bullets in one volley from this stage's boss. Stage 1 lobs a single fast
+    // aimed shot; stage 2 fans BOSS_SPREAD_COUNT of them BOSS_SPREAD_DEGREES
+    // apart, so the player has to move rather than sidestep one line.
+    public final int bossSpreadCount;
 
     // Where this stage sits on the run-long enemy pressure ramp (0 = a couple
     // of aliens drifting in, 1 = full pressure). Each stage picks up where the
@@ -43,7 +52,8 @@ public class Stage {
     public Stage(int number, String mapPath,
             int bossSecond, boolean last,
             double pressureStart, double pressureEnd, int firstPlaneFrame,
-            boolean planesFromBehind, int maxPlaneTier) {
+            boolean planesFromBehind, int[] planeTierFrames,
+            GunTier startingGun, int bossSpreadCount) {
         this.number = number;
         this.mapPath = mapPath;
         this.bossSecond = bossSecond;
@@ -52,14 +62,23 @@ public class Stage {
         this.pressureEnd = pressureEnd;
         this.firstPlaneFrame = firstPlaneFrame;
         this.planesFromBehind = planesFromBehind;
-        this.maxPlaneTier = maxPlaneTier;
+        this.planeTierFrames = planeTierFrames;
+        this.startingGun = startingGun;
+        this.bossSpreadCount = bossSpreadCount;
     }
 
     public static final Stage ONE = new Stage(1, Global.MAP_LEVEL_1,
             Global.STAGE_1_BOSS_SECOND, false,
-            0.0, 0.45, Global.PLANE_FIRST_WAVE_FRAME, false, 1);
+            0.0, 0.45, Global.PLANE_FIRST_WAVE_FRAME, false,
+            Global.STAGE_1_PLANE_TIER_FRAMES, GunTier.BASE, 1);
 
+    // Stage 2 is entered on the 2x gun and eased in: no planes at all for the
+    // first STAGE_2_FIRST_PLANE_FRAME, then light traffic, heavies at 0:30 and
+    // elites at 1:15. Opening at stage 1's ending pressure with every model
+    // available from frame 0 made its first minute harder than its boss.
     public static final Stage TWO = new Stage(2, Global.MAP_LEVEL_2,
             Global.STAGE_2_BOSS_SECOND, true,
-            0.45, 1.0, 0, true, 2);
+            0.45, 1.0, Global.STAGE_2_FIRST_PLANE_FRAME, true,
+            Global.STAGE_2_PLANE_TIER_FRAMES, GunTier.FLOWER,
+            Global.BOSS_SPREAD_COUNT);
 }

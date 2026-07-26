@@ -33,21 +33,32 @@ public class EnemyShot extends Sprite {
      * the player right now.
      */
     public EnemyShot(int muzzleX, int muzzleY, int targetX, int targetY, int fallbackStep) {
+        this(muzzleX, muzzleY, targetX, targetY, fallbackStep,
+                PLANE_SHOT_SPEED, 0.0, sprite());
+    }
 
-        Image bullet = sprite();
+    /**
+     * The general form, for shooters that are not a plane.
+     *
+     * angleOffset rotates the shot off the line to the player, which is how a
+     * spread is fired: one volley, the same aim point, a few fixed offsets.
+     * speed and bullet let a subclass be faster and look different.
+     */
+    protected EnemyShot(int muzzleX, int muzzleY, int targetX, int targetY,
+            int fallbackStep, double speed, double angleOffset, Image bullet) {
+
         setImage(bullet);
 
         double aimX = targetX - muzzleX;
         double aimY = targetY - muzzleY;
-        double length = Math.hypot(aimX, aimY);
-        if (length < 1e-6) {
+        if (Math.hypot(aimX, aimY) < 1e-6) {
             // Firing from inside the player: just carry on straight ahead.
-            aimX = fallbackStep;
+            aimX = fallbackStep != 0 ? fallbackStep : -1;
             aimY = 0;
-            length = 1;
         }
-        this.vx = aimX / length * PLANE_SHOT_SPEED;
-        this.vy = aimY / length * PLANE_SHOT_SPEED;
+        double angle = Math.atan2(aimY, aimX) + angleOffset;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
 
         // Centre the bullet on the muzzle.
         this.px = muzzleX - bullet.getWidth(null) / 2.0;

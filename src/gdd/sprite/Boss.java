@@ -1,6 +1,7 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import gdd.Stage;
 import javax.swing.ImageIcon;
 
 public class Boss extends Enemy {
@@ -15,14 +16,17 @@ public class Boss extends Enemy {
     private int minY;
     private int maxY;
     private final int holdX; // x where the boss stops and hovers
+    private final int spreadCount; // bullets per volley
+    private int fireCooldown = BOSS_FIRE_COOLDOWN;
 
     // playfieldBottom = y of the top of the dashboard; the boss patrols above
-    // it. stageNumber picks the artwork, so the same stage always shows the
-    // same boss however many times it is replayed.
-    public Boss(int x, int y, int playfieldBottom, int stageNumber) {
+    // it. The stage picks the artwork — so a stage always shows the same boss
+    // however many times it is replayed — and how many bullets a volley holds.
+    public Boss(int x, int y, int playfieldBottom, Stage stage) {
         super(x, y);
 
-        String imagePath = IMG_Boss[Math.floorMod(stageNumber - 1, IMG_Boss.length)];
+        this.spreadCount = Math.max(1, stage.bossSpreadCount);
+        String imagePath = IMG_Boss[Math.floorMod(stage.number - 1, IMG_Boss.length)];
         // Bigger than a regular alien: double the normal scale.
         var ii = new ImageIcon(imagePath);
         int scale = SCALE_FACTOR * 2;
@@ -68,6 +72,49 @@ public class Boss extends Enemy {
             y = maxY;
             vy = -Math.abs(vy);
         }
+
+        if (fireCooldown > 0) {
+            fireCooldown--;
+        }
+    }
+
+    /** Ready to fire — but not until it has finished sliding into the arena. */
+    public boolean readyToFire() {
+        return fireCooldown == 0 && x <= holdX;
+    }
+
+    /** Restarts the trigger interval after Scene1 spawns the volley. */
+    public void noteFired() {
+        fireCooldown = BOSS_FIRE_COOLDOWN;
+    }
+
+    /** How many bullets one volley holds — 1, or a spread on later stages. */
+    public int getSpreadCount() {
+        return spreadCount;
+    }
+
+    /**
+     * The angle offsets of one volley, in radians, centred on the line to the
+     * player: a single 0 for one bullet, or BOSS_SPREAD_DEGREES apart fanned
+     * symmetrically about the aim for a spread.
+     */
+    public double[] volleyAngles() {
+        double[] angles = new double[spreadCount];
+        double step = Math.toRadians(BOSS_SPREAD_DEGREES);
+        double first = -step * (spreadCount - 1) / 2.0;
+        for (int i = 0; i < spreadCount; i++) {
+            angles[i] = first + step * i;
+        }
+        return angles;
+    }
+
+    /** Where a bullet leaves the boss: the middle of its left-facing side. */
+    public int getMuzzleX() {
+        return x;
+    }
+
+    public int getMuzzleY() {
+        return y + height / 2;
     }
 
     // damage is the player's per-bullet damage: 1 normally, 2 with the bullet
