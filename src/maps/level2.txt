@@ -77,7 +77,14 @@ minGap 7
 2 7 2
 
 # --- Open cavern - a breather  (from 1:27) ---
-1 3 32
+# The last three columns ramp the floor back up instead of jumping 4 tiles in
+# one column. Enemies fly around the rock now (ENEMY_DODGE_SPEED), and no
+# aircraft can climb 128 px in the single column an instant ledge allows.
+# Column count is unchanged (29 + 3 = 32) so the boss arena still lands at 3:00.
+1 3 29
+1 4
+2 5
+2 6
 
 # --- The Vice - sustained pressure  (from 1:44) ---
 2 7

@@ -332,6 +332,41 @@ public class Scene1 extends JPanel {
     }
 
     /**
+     * Steers a sprite back toward the open corridor it is flying through,
+     * moving at most ENEMY_DODGE_SPEED this frame so it banks around the rock
+     * instead of snapping to a new height.
+     *
+     * It looks ENEMY_DODGE_LOOKAHEAD either side of itself and obeys the
+     * tightest column in that span, which is what makes it start climbing
+     * before the wall arrives rather than once it is already inside it.
+     *
+     * Returns true if the corridor is genuinely narrower than the sprite, i.e.
+     * there is no height that would keep it clear.
+     */
+    private boolean dodgeTerrain(Sprite s) {
+        int w = s.getImage().getWidth(null);
+        int h = s.getImage().getHeight(null);
+        int[] gap = terrain.gapBounds(s.getX() - ENEMY_DODGE_LOOKAHEAD,
+                w + ENEMY_DODGE_LOOKAHEAD * 2, terrainScroll, playfieldBottom());
+
+        int top = gap[0] + ENEMY_DODGE_MARGIN;
+        int bottom = gap[1] - ENEMY_DODGE_MARGIN - h;
+
+        // Too tight even for the margins: aim for the middle and take what we
+        // can get. Only a corridor shorter than the sprite is truly hopeless.
+        int target = bottom < top
+                ? (gap[0] + gap[1] - h) / 2
+                : Math.max(top, Math.min(s.getY(), bottom));
+
+        int dy = target - s.getY();
+        if (dy != 0) {
+            s.setY(s.getY() + Math.max(-ENEMY_DODGE_SPEED,
+                    Math.min(ENEMY_DODGE_SPEED, dy)));
+        }
+        return gap[1] - gap[0] < h;
+    }
+
+    /**
      * Should the cave hold still? It does from the moment the boss enters
      * until the clear screen, including the beat after the killing blow — the
      * world should not lurch back into motion under the death explosion.
@@ -1161,10 +1196,9 @@ private void drawDashboard(Graphics g) {
         }
         powerups.removeIf(p -> !p.isVisible());
 
-        // Enemies. A boss hovers in place instead of flying past, so it is the
-        // one enemy that has to be told where the rock is: hand it the open
-        // corridor across its own width before it moves, and it turns around
-        // at the wall rather than sinking into it.
+        // Enemies. Nothing flies into the rock any more: the boss hovers, so it
+        // is given the corridor as patrol limits and turns around at the wall,
+        // and everything else steers back into the corridor after it moves.
         for (Enemy enemy : enemies) {
             if (!enemy.isVisible()) {
                 continue;
@@ -1175,8 +1209,11 @@ private void drawDashboard(Graphics g) {
                         terrainScroll, playfieldBottom());
                 // Leave room under the boss for its HP bar, as before.
                 boss.setPatrolBounds(gap[0] + 8, gap[1] - boss.getHeight() - 20);
+                enemy.act(direction);
+            } else {
+                enemy.act(direction);
+                dodgeTerrain(enemy); // fly around the cave, not into it
             }
-            enemy.act(direction);
         }
 
         // Planes shoot on the same interval as the player's starting gun,
@@ -1234,10 +1271,18 @@ private void drawDashboard(Graphics g) {
             }
         }
 
-        // Walls destroy regular aliens and planes that drift into them (no
-        // score); the boss hovers over the terrain and is exempt.
+        // Safety net only. Enemies steer around the cave (dodgeTerrain above),
+        // so in a legal map none of them should ever die here — but a corridor
+        // genuinely shorter than a sprite leaves it nowhere to go, and it
+        // should go up rather than sit embedded in rock. No score either way.
         for (Enemy enemy : enemies) {
-            if (enemy.isVisible() && !enemy.isDying() && !(enemy instanceof Boss)
+            if (!enemy.isVisible() || enemy.isDying() || enemy instanceof Boss) {
+                continue;
+            }
+            int[] gap = terrain.gapBounds(enemy.getX(),
+                    enemy.getImage().getWidth(null), terrainScroll, playfieldBottom());
+            boolean trapped = gap[1] - gap[0] < enemy.getImage().getHeight(null);
+            if (trapped
                     && terrain.collides(spriteRect(enemy, 6), terrainScroll, playfieldBottom())) {
                 enemy.setDying(true);
                 explosions.add(new Explosion(enemy.getX(), enemy.getY()));
