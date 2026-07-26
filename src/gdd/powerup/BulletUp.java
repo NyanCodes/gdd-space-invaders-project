@@ -1,11 +1,11 @@
 package gdd.powerup;
 
 import static gdd.Global.*;
-import gdd.ImageUtil;
 import gdd.sprite.Player;
 
 /**
  * Blue flower: upgrades the gun to the heavier shot2 bullet.
+ * Updated the sprite to 2x image.
  *
  * The upgrade is permanent for the rest of the run, so Scene1 stops rolling it
  * as a random drop once the player is holding one.
@@ -14,11 +14,12 @@ public class BulletUp extends PowerUp {
 
     public BulletUp(int x, int y) {
         super(x, y);
-        setImage(ImageUtil.fit(IMG_POWERUP_BULLET, POWERUP_SIZE, POWERUP_SIZE));
+        loadFrames(IMG_POWERUP_BULLET, POWERUP_SIZE, POWERUP_SIZE);
     }
 
     @Override
     public void act() {
+        updateAnimation();
         // Drift left from the right edge so the player can fly into it.
         this.x -= POWERUP_DRIFT_SPEED;
         if (this.x < -60) {

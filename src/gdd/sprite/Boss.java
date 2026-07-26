@@ -12,13 +12,16 @@ public class Boss extends Enemy {
     private final int minY;
     private final int maxY;
     private final int holdX; // x where the boss stops and hovers
+    public static int BossNo = 0;
 
     // playfieldBottom = y of the top of the dashboard; the boss patrols above it.
     public Boss(int x, int y, int playfieldBottom) {
         super(x, y);
 
+        String imagePath = IMG_Boss[BossNo % IMG_Boss.length];
+        BossNo++;
         // Bigger than a regular alien: double the normal scale.
-        var ii = new ImageIcon(IMG_ENEMY);
+        var ii = new ImageIcon(imagePath);
         int scale = SCALE_FACTOR * 2;
         var scaledImage = ii.getImage().getScaledInstance(ii.getIconWidth() * scale,
                 ii.getIconHeight() * scale,
