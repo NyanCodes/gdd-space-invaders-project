@@ -28,11 +28,11 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
-import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -148,7 +148,7 @@ public class Scene1 extends JPanel {
 
     private void initAudio() {
         try {
-            String filePath = "src/audio/scene1.wav";
+            String filePath = (stage.number == 1) ? Stage1_sfx : Stage2_sfx;
             audioPlayer = new AudioPlayer(filePath);
             audioPlayer.play();
         } catch (Exception e) {
@@ -381,8 +381,14 @@ public class Scene1 extends JPanel {
             }
 
             if (enemy.isDying()) {
-
+                explodeAt(enemy.getX() + 2, enemy.getY() + 2);
                 enemy.die();
+                try {
+                    audioPlayer = new AudioPlayer(Explosion_sfx);
+                    audioPlayer.playOnce();
+                } catch (Exception e) {
+                    System.err.println("Error initializing audio player: " + e.getMessage());
+                }
             }
         }
     }
@@ -478,9 +484,12 @@ public class Scene1 extends JPanel {
         for (Explosion explosion : explosions) {
 
             if (explosion.isVisible()) {
+
+                explosion.act(0);
+
                 g.drawImage(explosion.getImage(), explosion.getX(), explosion.getY(), this);
                 explosion.visibleCountDown();
-                if (!explosion.isVisible()) {
+                if (explosion.isFinished()) {
                     toRemove.add(explosion);
                 }
             }
@@ -749,6 +758,12 @@ public class Scene1 extends JPanel {
     }
 
     private void endGame(String msg) {
+        try {
+            audioPlayer = new AudioPlayer(GameOver_sfx);
+            audioPlayer.play();
+        } catch (Exception e) {
+            System.err.println("Error initializing audio player: " + e.getMessage());
+        }
         inGame = false;
         timer.stop();
         message = msg;
@@ -764,6 +779,12 @@ public class Scene1 extends JPanel {
             endGame("Game Over");
         } else {
             respawnPlayer();
+        }
+        try {
+            audioPlayer = new AudioPlayer(Explosion_sfx);
+            audioPlayer.playOnce();
+        } catch (Exception e) {
+            System.err.println("Error initializing audio player: " + e.getMessage());
         }
     }
 

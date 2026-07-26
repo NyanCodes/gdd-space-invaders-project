@@ -36,7 +36,7 @@ public class Global {
 
     // The ship's starting gun and engine. Enemy planes fire on the same
     // interval, so these are the single source for "the player's default".
-    public static final int PLAYER_SPEED = 2; // px per frame; ~120 px/s
+    public static final int PLAYER_SPEED = 5; // px per frame; ~120 px/s
     public static final int PLAYER_SHOT_SPEED = 20; // px per frame a bullet travels
     public static final int PLAYER_SHOT_COOLDOWN = 90; // frames between shots (1.5s)
 
@@ -140,4 +140,23 @@ public class Global {
     public static final String IMG_POWERUP_SPEEDUP = "src/images/speed-up-mushroom.png";
     public static final String IMG_POWERUP_SHIELD = "src/images/shield-mushroom.png";
     public static final String IMG_POWERUP_BULLET = "src/images/bullet-flower.png";
+
+    //Added Sprites
+    public static final String[] IMG_EXPLOSIONS_Frames = {
+        "src/images/Explosion_sprites/hits-2-1.png",
+        "src/images/Explosion_sprites/hits-2-2.png",
+        "src/images/Explosion_sprites/hits-2-3.png",
+        "src/images/Explosion_sprites/hits-2-4.png",
+        "src/images/Explosion_sprites/hits-2-5.png",
+        "src/images/Explosion_sprites/hits-2-6.png",
+        "src/images/Explosion_sprites/hits-2-7.png",
+    };
+
+    //Audiio Paths
+    public static final String Explosion_sfx = "src/audio/Explosion.wav";
+    public static final String GameOver_sfx = "src/audio/Fallen in Battle.wav";
+    public static final String Victory_sfx = "src/audio/Victory! All Clear.wav";
+    public static final String Title_sfx = "src/audio/Title Theme.wav";
+    public static final String Stage1_sfx = "src/audio/Fields of Ice.wav";
+    public static final String Stage2_sfx = "src/audio/Zero Respect.wav";
 }

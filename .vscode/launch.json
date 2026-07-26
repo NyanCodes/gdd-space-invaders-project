@@ -10,6 +10,13 @@
             "name": "Main",
             "request": "launch",
             "mainClass": "gdd.Main",
+            "projectName": "gdd-space-invaders-project_971dbb4"
+        },
+        {
+            "type": "java",
+            "name": "Main",
+            "request": "launch",
+            "mainClass": "gdd.Main",
             "projectName": "gdd-space-invaders-project_c43775c1"
         },
         {

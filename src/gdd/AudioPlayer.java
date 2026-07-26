@@ -246,4 +246,11 @@ public class AudioPlayer {
         clip.loop(Clip.LOOP_CONTINUOUSLY);
     }
 
+    public void playOnce() {
+        clip.setFramePosition(0);
+        clip.loop(0);
+        clip.start();
+        status = "play";
+    }
+
 }
