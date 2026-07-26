@@ -1,6 +1,7 @@
 package gdd.sprite;
 
 import static gdd.Global.*;
+import gdd.GunTier;
 import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import javax.swing.ImageIcon;
@@ -22,14 +23,15 @@ public class Player extends Sprite {
     // bosses and cave walls still take a whole life on contact.
     private int hull = PLAYER_HULL;
 
-    // Firing model. Normally one shot per reload; the bullet flower raises
-    // shotsPerBurst to 2, so the second shot follows the first after a short
-    // burstGap and only then does the full reload start.
-    private int shotsPerBurst = 1;
-    private int burstLeft = 1; // shots still available before the reload
+    // Firing model. Each shot in a burst follows the last after a short
+    // burstGap; only when the burst is spent does the full reload start. How
+    // many shots a burst holds is the gun's rung on the upgrade ladder:
+    // 1 → 2 → 4 → 6.
+    private GunTier gunTier = GunTier.BASE;
+    private int shotsPerBurst = GunTier.BASE.shotsPerBurst;
+    private int burstLeft = GunTier.BASE.shotsPerBurst; // shots left before the reload
     private int burstGap = 0; // frames until the next shot inside a burst
-    private int shotDamage = 1; // damage a single bullet deals
-    private boolean bulletFlower = false; // gun upgraded to the shot2 bullet
+    private int shotDamage = GunTier.BASE.damage; // damage a single bullet deals
 
     private Rectangle bounds = new Rectangle(175,135,17,32);
 
@@ -128,22 +130,32 @@ public class Player extends Sprite {
         return shotsPerBurst;
     }
 
+    public GunTier getGunTier() {
+        return gunTier;
+    }
+
+    /** True once the gun is off its starting rung, whichever rung it is on. */
     public boolean hasBulletFlower() {
-        return bulletFlower;
+        return gunTier != GunTier.BASE;
     }
 
     /**
-     * Bullet flower pickup: the shot2 bullet. Faster, double damage, and two
-     * shots back to back before the reload. Permanent for the rest of the run,
-     * so picking up a second one is a no-op beyond the speed cap.
+     * Fits a gun-upgrade flower. Upgrades are permanent and only ever move
+     * forward, so a pickup for a rung the player already has (or has passed)
+     * does nothing — a stale drop can't downgrade the gun.
      */
-    public void equipBulletFlower() {
-        bulletFlower = true;
-        shotDamage = BULLET_DAMAGE;
-        shotsPerBurst = BULLET_SHOTS_PER_BURST;
+    public void equipGun(GunTier tier) {
+        if (tier == null || tier.ordinal() <= gunTier.ordinal()) {
+            return;
+        }
+        gunTier = tier;
+        shotDamage = tier.damage;
+        shotsPerBurst = tier.shotsPerBurst;
         burstLeft = shotsPerBurst;
         burstGap = 0;
-        setShotSpeed(shotSpeed + BULLET_SHOT_SPEED_BONUS);
+        if (tier.shotSpeedBonus != 0) {
+            setShotSpeed(shotSpeed + tier.shotSpeedBonus);
+        }
     }
 
     public void activateShield(int frames) {

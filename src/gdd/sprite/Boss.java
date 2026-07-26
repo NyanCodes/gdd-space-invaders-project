@@ -9,17 +9,20 @@ public class Boss extends Enemy {
     private int width;
     private int height;
     private int vy = 2;
-    private final int minY;
-    private final int maxY;
+    // Patrol limits in screen pixels. Not fixed at spawn: Scene1 refreshes
+    // them from the cave walls every frame (setPatrolBounds), so the boss
+    // turns around at the rock instead of flying through it.
+    private int minY;
+    private int maxY;
     private final int holdX; // x where the boss stops and hovers
-    public static int BossNo = 0;
 
-    // playfieldBottom = y of the top of the dashboard; the boss patrols above it.
-    public Boss(int x, int y, int playfieldBottom) {
+    // playfieldBottom = y of the top of the dashboard; the boss patrols above
+    // it. stageNumber picks the artwork, so the same stage always shows the
+    // same boss however many times it is replayed.
+    public Boss(int x, int y, int playfieldBottom, int stageNumber) {
         super(x, y);
 
-        String imagePath = IMG_Boss[BossNo % IMG_Boss.length];
-        BossNo++;
+        String imagePath = IMG_Boss[Math.floorMod(stageNumber - 1, IMG_Boss.length)];
         // Bigger than a regular alien: double the normal scale.
         var ii = new ImageIcon(imagePath);
         int scale = SCALE_FACTOR * 2;
@@ -35,6 +38,17 @@ public class Boss extends Enemy {
         this.holdX = BOARD_WIDTH - width - 60;
     }
 
+    /**
+     * The band of open air the boss may patrol, as top/bottom screen y for its
+     * own top-left corner. Scene1 recomputes this from the terrain each frame;
+     * a corridor narrower than the boss collapses to a single safe y rather
+     * than inverting the range.
+     */
+    public void setPatrolBounds(int top, int bottom) {
+        this.minY = top;
+        this.maxY = Math.max(top, bottom);
+    }
+
     @Override
     public void act(int direction) {
         if (x > holdX) {
@@ -43,19 +57,21 @@ public class Boss extends Enemy {
         } else {
             // Patrol up and down in front of the player.
             y += vy;
-            if (y < minY) {
-                y = minY;
-                vy = -vy;
-            }
-            if (y > maxY) {
-                y = maxY;
-                vy = -vy;
-            }
+        }
+
+        // Bounce off the rock. Checked during the entrance too, so a boss that
+        // slides in under a low ceiling is pushed clear instead of clipping it.
+        if (y <= minY) {
+            y = minY;
+            vy = Math.abs(vy);
+        } else if (y >= maxY) {
+            y = maxY;
+            vy = -Math.abs(vy);
         }
     }
 
-    // damage is the player's per-bullet damage: 1 normally, 2 with the
-    // bullet flower, so an upgraded gun drops a boss in three hits.
+    // damage is the player's per-bullet damage: 1 normally, 2 with the bullet
+    // flower — BOSS_HP is sized so even the upgraded gun needs a dozen hits.
     public void hit(int damage) {
         hp = Math.max(0, hp - damage); // never negative, the HP bar reads it
     }

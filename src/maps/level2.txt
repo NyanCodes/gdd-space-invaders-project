@@ -1,4 +1,7 @@
-# Level 2 - 4 minutes. Starts where level 1 ended, squeezes to 7 tiles.
+# Level 2 - the final stage. Starts where level 1 ended, squeezes to 7 tiles,
+# then opens into the boss arena at 3:00. Killing that boss wins the game, so
+# nothing past the arena is ever reached - the cave stops scrolling the moment
+# the boss enters.
 #
 # Each data line is:  <top> <bottom> [count]
 #   top    = rock tiles hanging from the ceiling  (1 tile = 32 px)
@@ -32,7 +35,7 @@ minGap 7
 4 3
 5 2 3
 
-# --- BOSS 1 arena (0:40) - wide open  (from 0:32) ---
+# --- Open cavern - a breather  (from 0:32) ---
 3 1 36
 
 # --- Stalactite run  (from 0:51) ---
@@ -73,7 +76,7 @@ minGap 7
 1 8
 2 7 2
 
-# --- BOSS 2 arena (1:35) - wide open  (from 1:27) ---
+# --- Open cavern - a breather  (from 1:27) ---
 1 3 32
 
 # --- The Vice - sustained pressure  (from 1:44) ---
@@ -118,10 +121,10 @@ minGap 7
 8 3 4
 7 4 2
 
-# --- BOSS 3 arena (2:35) - wide open  (from 2:29) ---
+# --- Open cavern - a breather  (from 2:29) ---
 4 1 30
 
-# --- Final gauntlet  (from 2:45) ---
+# --- Final gauntlet - the tightest run of the game  (from 2:45) ---
 6 4 8
 5 5 2
 4 6 2
@@ -131,48 +134,13 @@ minGap 7
 4 6
 4 7
 5 6
-4 7 3
-5 6
-4 7 8
-5 6 4
-4 7 2
-3 8 4
-4 7
-5 6
-6 5
-7 4
-8 3 5
-8 4 2
-7 5
-8 4 4
-7 5
-8 4 2
-7 5
-8 4 5
 
-# --- The cave opens up - regroup  (from 3:20) ---
-7 5 2
-8 4 2
-7 4 3
-6 4 2
-5 4 2
-4 3 3
-3 2 2
+# --- The cave opens up - the arena is ahead  (from 2:55) ---
+3 4
+3 2
 
-# --- BOSS 4 arena (3:35) - wide open  (from 3:29) ---
-4 1 37
-
-# --- Last gauntlet - hold on to the end  (from 3:49) ---
-5 3 3
-6 4 2
-5 5 2
-6 5 2
-5 6 2
-6 6 2
-7 5 2
-6 6
-7 5
-8 4 2
-7 5 2
-8 4 2
-7 5 3
+# --- BOSS arena (3:00) - wide open, and the scroll freezes here ---
+# 44 columns starting at 2:56.5. The boss enters at 3:00, which puts the
+# frozen screen on columns 337-360 - comfortably inside this section. The
+# stage ends when the boss dies, so the map stops here.
+4 1 44

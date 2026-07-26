@@ -44,6 +44,60 @@ public final class ImageUtil {
     }
 
     /**
+     * The animation-frame version of {@link #fit}.
+     *
+     * Trimming each frame on its own would crop every one to its own bounding
+     * box, so a projectile whose trail grows and shrinks would jump around and
+     * change size as it cycled. Here the frames are trimmed to a single shared
+     * box — the union of them all — and scaled by one factor, so the animation
+     * plays in place.
+     */
+    public static Image[] fitAll(String[] paths, int maxW, int maxH) {
+        BufferedImage[] raw = new BufferedImage[paths.length];
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = -1;
+        int maxY = -1;
+
+        for (int i = 0; i < paths.length; i++) {
+            raw[i] = toBuffered(new ImageIcon(paths[i]).getImage());
+            int[] box = bounds(raw[i]);
+            if (box == null) {
+                continue; // fully transparent frame, nothing to contribute
+            }
+            minX = Math.min(minX, box[0]);
+            minY = Math.min(minY, box[1]);
+            maxX = Math.max(maxX, box[2]);
+            maxY = Math.max(maxY, box[3]);
+        }
+        if (maxX < 0) {
+            minX = minY = 0;
+            maxX = raw[0].getWidth() - 1;
+            maxY = raw[0].getHeight() - 1;
+        }
+
+        int w = maxX - minX + 1;
+        int h = maxY - minY + 1;
+        double scale = Math.min(1.0,
+                Math.min((double) maxW / w, (double) maxH / h));
+        int outW = Math.max(1, (int) Math.round(w * scale));
+        int outH = Math.max(1, (int) Math.round(h * scale));
+
+        Image[] out = new Image[paths.length];
+        for (int i = 0; i < paths.length; i++) {
+            // Clamp the shared box to this frame, in case the files differ in size.
+            int cw = Math.min(w, raw[i].getWidth() - minX);
+            int ch = Math.min(h, raw[i].getHeight() - minY);
+            BufferedImage cropped = raw[i].getSubimage(minX, minY,
+                    Math.max(1, cw), Math.max(1, ch));
+            out[i] = scale < 1.0
+                    ? cropped.getScaledInstance(outW, outH, Image.SCALE_SMOOTH)
+                    : cropped;
+        }
+        return out;
+    }
+
+    /**
      * Mirrors an image left to right. The plane sprites are all baked facing
      * left, so the ones flying the other way are flipped here rather than
      * shipped as a second copy of the same art.
@@ -103,6 +157,17 @@ public final class ImageUtil {
     // Crop away the transparent border. A fully transparent image is returned
     // untouched rather than cropped to nothing.
     private static BufferedImage trim(BufferedImage src) {
+        int[] box = bounds(src);
+        if (box == null) {
+            return src;
+        }
+        return src.getSubimage(box[0], box[1],
+                box[2] - box[0] + 1, box[3] - box[1] + 1);
+    }
+
+    // {minX, minY, maxX, maxY} of the non-transparent pixels, or null if the
+    // image is empty.
+    private static int[] bounds(BufferedImage src) {
         int minX = src.getWidth();
         int minY = src.getHeight();
         int maxX = -1;
@@ -119,9 +184,6 @@ public final class ImageUtil {
             }
         }
 
-        if (maxX < 0) {
-            return src;
-        }
-        return src.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
+        return maxX < 0 ? null : new int[]{minX, minY, maxX, maxY};
     }
 }

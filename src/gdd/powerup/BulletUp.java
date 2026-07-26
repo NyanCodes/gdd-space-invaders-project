@@ -1,20 +1,34 @@
 package gdd.powerup;
 
 import static gdd.Global.*;
+import gdd.GunTier;
 import gdd.sprite.Player;
 
 /**
- * Blue flower: upgrades the gun to the heavier shot2 bullet.
- * Updated the sprite to 2x image.
+ * A gun-upgrade flower. Which rung of the ladder it grants is the tier it was
+ * built with, and the tier also picks the artwork — blue "2X", orange "4X",
+ * purple "6X".
  *
- * The upgrade is permanent for the rest of the run, so Scene1 stops rolling it
- * as a random drop once the player is holding one.
+ * The upgrade is permanent, so Scene1 only ever drops the one rung above the
+ * gun the player is currently holding.
  */
 public class BulletUp extends PowerUp {
 
+    private final GunTier tier;
+
+    /** The original blue flower — the first rung. */
     public BulletUp(int x, int y) {
+        this(x, y, GunTier.FLOWER);
+    }
+
+    public BulletUp(int x, int y, GunTier tier) {
         super(x, y);
-        loadFrames(IMG_POWERUP_BULLET, POWERUP_SIZE, POWERUP_SIZE);
+        this.tier = tier == null ? GunTier.FLOWER : tier;
+        loadFrames(this.tier.pickupFrames, POWERUP_SIZE, POWERUP_SIZE);
+    }
+
+    public GunTier getTier() {
+        return tier;
     }
 
     @Override
@@ -29,7 +43,7 @@ public class BulletUp extends PowerUp {
 
     @Override
     public void upgrade(Player player) {
-        player.equipBulletFlower();
+        player.equipGun(tier);
         this.die(); // Remove the power-up after use
     }
 }

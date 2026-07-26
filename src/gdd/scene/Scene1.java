@@ -3,10 +3,12 @@ package gdd.scene;
 import gdd.AudioPlayer;
 import gdd.Game;
 import static gdd.Global.*;
+import gdd.GunTier;
 import gdd.ImageUtil;
 import gdd.SpawnDetails;
 import gdd.Stage;
 import gdd.powerup.BulletUp;
+import gdd.powerup.HeartUp;
 import gdd.powerup.PowerUp;
 import gdd.powerup.ShieldUp;
 import gdd.powerup.SpeedUp;
@@ -44,6 +46,12 @@ import javax.swing.Timer;
 public class Scene1 extends JPanel {
 
     private int frame = 0;
+    // How far the world has scrolled, in pixels. Normally this tracks frame
+    // 1:1, but it stops while a boss is on the field so the fight always takes
+    // place in the wide arena the map author put there — the fight lasts as
+    // long as it lasts, and the cave must not grind the player into a wall
+    // meanwhile. frame stays the master clock for spawns and the HUD timer.
+    private int terrainScroll = 0;
     private List<PowerUp> powerups;
     private List<Enemy> enemies;
     private List<Explosion> explosions;
@@ -67,11 +75,22 @@ public class Scene1 extends JPanel {
     private int nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
     private int nextPlaneSpawnFrame; // set from the stage in gameInit()
     private int nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
-    private int bossSpawnIndex = 0;
+    private int nextHeartFrame = HEART_FIRST_SECONDS * 60; // hearts run their own clock
+    private boolean bossSpawned = false; // one boss per stage, and only once
+    // Counts down from the killing blow to the clear screen; -1 when idle.
+    private int clearDelayFrames = -1;
+    // Toughest plane model the player has actually met. The gun ladder is
+    // gated on this, so an upgrade always arrives as the answer to an enemy
+    // the player has already had to deal with.
+    private int seenPlaneTier = 0;
+    // The gun rung most recently dropped. Each newly unlocked rung is handed
+    // out once for free; after that it competes with the other pickups.
+    private GunTier lastGunOffered = null;
     private Image lifeIcon; // small vertical (nose-up) ship for the HUD
     private Image tipIconSpeed; // small power-up icons for the start-of-game tip box
     private Image tipIconShield;
     private Image tipIconBullet;
+    private Image tipIconHeart;
 
     private boolean inGame = true;
     // Stage cleared but the game continues — the end screen offers NEXT STAGE
@@ -219,14 +238,19 @@ public class Scene1 extends JPanel {
 
         // Reset run state so a scene can be started more than once.
         frame = 0;
+        terrainScroll = 0;
         lives = PLAYER_LIVES;
         deaths = carriedScore;
         invincibleFrames = 0;
-        bossSpawnIndex = 0;
+        bossSpawned = false;
+        clearDelayFrames = -1;
+        seenPlaneTier = 0;
+        lastGunOffered = null;
         nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
         // Only stage 1 delays the first plane; stage 2 opens with them.
         nextPlaneSpawnFrame = stage.firstPlaneFrame;
         nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
+        nextHeartFrame = HEART_FIRST_SECONDS * 60;
         inGame = true;
         awaitingNextStage = false;
 
@@ -250,17 +274,19 @@ public class Scene1 extends JPanel {
         tipIconSpeed = ImageUtil.fit(IMG_POWERUP_SPEEDUP[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
         tipIconShield = ImageUtil.fit(IMG_POWERUP_SHIELD[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
         tipIconBullet = ImageUtil.fit(IMG_POWERUP_BULLET[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconHeart = ImageUtil.fit(IMG_POWERUP_HEART[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
     }
 
     /**
      * How hard the game is pushing right now, 0 (a lone alien drifting past)
      * to 1 (full pressure). Each stage covers its own slice of the run-long
-     * ramp, so difficulty climbs steadily across all seven minutes instead of
-     * resetting when stage 2 starts.
+     * ramp, so difficulty climbs steadily across the whole run instead of
+     * resetting when stage 2 starts. The ramp is spread over the approach to
+     * the boss, so the stage is at its hardest just as the boss arrives.
      */
     private double pressure() {
         double stageProgress = Math.min(1.0,
-                (double) frame / (stage.durationSeconds * 60));
+                (double) frame / (stage.bossSecond * 60));
         return stage.pressureStart
                 + (stage.pressureEnd - stage.pressureStart) * stageProgress;
     }
@@ -289,11 +315,29 @@ public class Scene1 extends JPanel {
                 s.getImage().getHeight(null) - margin * 2);
     }
 
-    // Move a freshly spawned sprite's y into the open corridor at its x,
+    // Move a freshly spawned sprite's y into the open corridor it spans,
     // so nothing materializes inside a cave wall.
     private void clampIntoGap(Sprite s) {
-        s.setY(terrain.clampToGap(s.getX(), frame, s.getY(),
+        s.setY(terrain.clampToGap(s.getX(), s.getImage().getWidth(null),
+                terrainScroll, s.getY(),
                 s.getImage().getHeight(null), playfieldBottom()));
+    }
+
+    /**
+     * Should the cave hold still? It does from the moment the boss enters
+     * until the clear screen, including the beat after the killing blow — the
+     * world should not lurch back into motion under the death explosion.
+     */
+    private boolean scrollFrozen() {
+        if (clearDelayFrames >= 0) {
+            return true;
+        }
+        for (Enemy enemy : enemies) {
+            if (enemy instanceof Boss && enemy.isVisible() && !enemy.isDying()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Top edge of the bottom dashboard; gameplay stays above this line.
@@ -308,17 +352,20 @@ public class Scene1 extends JPanel {
 
     private void drawTerrain(Graphics g) {
         int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
-        terrain.draw(g, frame, panelW, playfieldBottom());
+        terrain.draw(g, terrainScroll, panelW, playfieldBottom());
     }
 
     private void drawMap(Graphics g) {
         // Draw horizontally scrolling starfield background (right -> left).
+        // Shares terrainScroll with the cave walls so the whole world freezes
+        // together during a boss fight instead of the stars drifting past
+        // stationary rock.
 
-        // Smooth scrolling offset (1 pixel per frame).
-        int scrollOffset = (frame) % BLOCKWIDTH;
+        // Smooth scrolling offset (1 pixel per scrolled frame).
+        int scrollOffset = (terrainScroll) % BLOCKWIDTH;
 
         // Which MAP columns are currently visible, based on how far we've scrolled.
-        int baseCol = (frame) / BLOCKWIDTH;
+        int baseCol = (terrainScroll) / BLOCKWIDTH;
         int colsNeeded = (BOARD_WIDTH / BLOCKWIDTH) + 2; // +2 for smooth scrolling
 
         // Loop through columns that should be visible on screen.
@@ -566,9 +613,14 @@ public class Scene1 extends JPanel {
             return;
         }
 
+        // One row per pickup, so the box grows if another is ever added.
+        Image[] icons = {tipIconSpeed, tipIconShield, tipIconBullet, tipIconHeart};
+        String[] labels = {"SPEED UP", "SHIELD", "BULLET x2", "EXTRA LIFE"};
+        int rowH = 28;
+
         int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
         int w = 150;
-        int h = 116;
+        int h = 32 + rowH * icons.length;
         int x = panelW - w - 12;
         int y = 12;
 
@@ -581,17 +633,24 @@ public class Scene1 extends JPanel {
         g.setColor(new Color(0, 255, 120));
         g.drawString("POWER-UPS", x + 10, y + 18);
 
-        int row1 = y + 26;
-        int row2 = y + 54;
-        int row3 = y + 82;
-        g.drawImage(tipIconSpeed, x + 10, row1, this);
-        g.drawImage(tipIconShield, x + 10, row2, this);
-        g.drawImage(tipIconBullet, x + 10, row3, this);
+        for (int i = 0; i < icons.length; i++) {
+            int row = y + 26 + i * rowH;
+            g.drawImage(icons[i], x + 10, row, this);
+            g.setColor(Color.white);
+            g.drawString(labels[i], x + 40, row + 15);
+        }
+    }
 
-        g.setColor(Color.white);
-        g.drawString("SPEED UP", x + 40, row1 + 15);
-        g.drawString("SHIELD", x + 40, row2 + 15);
-        g.drawString("BULLET x2", x + 40, row3 + 15);
+    // HUD colour for a gun rung, matched to its pickup flower.
+    private Color gunTierColor(GunTier tier) {
+        switch (tier) {
+            case BOLT:
+                return new Color(255, 140, 30);   // orange 4X
+            case CHARGED:
+                return new Color(200, 110, 255);  // purple 6X
+            default:
+                return new Color(255, 200, 40);   // blue 2X keeps the old gold
+        }
     }
 
 private void drawDashboard(Graphics g) {
@@ -619,11 +678,12 @@ private void drawDashboard(Graphics g) {
 		g.drawString("RELOAD", 260, labelY); // Renamed from BULLET for clarity
 		g.drawString("SCORE", 370, labelY);
 
-		// Bullet-flower badge next to the RELOAD label
+		// Gun-ladder badge next to the RELOAD label, coloured to match the
+		// flower that granted the rung so the HUD and the pickup agree.
 		if (player.hasBulletFlower()) {
-			g.setColor(new Color(255, 200, 40));
+			g.setColor(gunTierColor(player.getGunTier()));
 			g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(), 315, labelY);
-			g.setColor(new Color(0, 255, 120)); 
+			g.setColor(new Color(0, 255, 120));
 		}
 
 		// Stage number, sitting above the timer in the right corner
@@ -763,14 +823,17 @@ private void drawDashboard(Graphics g) {
     // into the open corridor so the ship never reappears inside a wall.
     private void respawnPlayer() {
         player.respawn();
-        player.setY(terrain.clampToGap(player.getX(), frame, player.getY(),
+        player.setY(terrain.clampToGap(player.getX(), player.getWidth(),
+                terrainScroll, player.getY(),
                 player.getHeight(), playfieldBottom()));
         invincibleFrames = 120; // 2s of blinking safety
     }
 
-    private void endGame(String msg) {
+    // Ends the run and shows the end screen. sfx is the sting that plays over
+    // it — clearing a stage is a win and must not share the death music.
+    private void endGame(String msg, String sfx) {
         try {
-            audioPlayer = new AudioPlayer(GameOver_sfx);
+            audioPlayer = new AudioPlayer(sfx);
             audioPlayer.play();
         } catch (Exception e) {
             System.err.println("Error initializing audio player: " + e.getMessage());
@@ -781,13 +844,25 @@ private void drawDashboard(Graphics g) {
         gameOverAt = System.currentTimeMillis();
     }
 
+    // A heart picked up. Lives are hard-capped at PLAYER_LIVES, so this tops
+    // the player back up rather than stacking a reserve.
+    private void gainLives(int count) {
+        if (count > 0) {
+            lives = Math.min(PLAYER_LIVES, lives + count);
+        }
+    }
+
     // One life gone: either the run is over or the ship comes back at the
     // start position with a full hull and a blink of safety.
     private void loseLife() {
         lives--;
+        // Bring the next heart forward. Its schedule was set while the player
+        // was healthy and the drop was worth nothing to them; now it is worth
+        // something, so it should turn up soon rather than a minute later.
+        nextHeartFrame = Math.min(nextHeartFrame, frame + HEART_RETRY_SECONDS * 60);
         if (lives <= 0) {
             player.die();
-            endGame("Game Over");
+            endGame("Game Over", GameOver_sfx);
         } else {
             respawnPlayer();
         }
@@ -815,7 +890,7 @@ private void drawDashboard(Graphics g) {
             return BOSS_SCORE;
         }
         if (enemy instanceof EnemyPlane) {
-            return PLANE_SCORE;
+            return ((EnemyPlane) enemy).getScore(); // heavier models pay more
         }
         return ALIEN_SCORE;
     }
@@ -832,32 +907,75 @@ private void drawDashboard(Graphics g) {
      * One enemy plane from the pool. Plane 1 only ever attacks the player's
      * front (in from the right edge), plane 2 only the player's back (in from
      * the left), and plane 3 does either.
+     *
+     * The stage narrows that further: stage 1 is front-only, so the rear-only
+     * plane 2 never appears there and plane 3 always comes head-on. Stage 2 is
+     * where the player first has to worry about their back.
      */
     private void spawnPlane() {
 
-        EnemyPlane.Type[] types = EnemyPlane.Type.values();
-        EnemyPlane.Type type = types[randomizer.nextInt(types.length)];
-        EnemyPlane.Heading heading = type.pickHeading(randomizer);
+        EnemyPlane.Type type = EnemyPlane.Type.pick(randomizer,
+                stage.planesFromBehind, planeTierCap(), pressure());
+        EnemyPlane.Heading heading = type.pickHeading(randomizer, stage.planesFromBehind);
 
-        int py = 10 + randomizer.nextInt(Math.max(1, playfieldBottom() - PLANE_SIZE - 20));
+        int py = 10 + randomizer.nextInt(Math.max(1, playfieldBottom() - type.size - 20));
         int px = heading == EnemyPlane.Heading.LEFTWARD
                 ? BOARD_WIDTH + randomizer.nextInt(80)
-                : -PLANE_SIZE - randomizer.nextInt(80);
+                : -type.size - randomizer.nextInt(80);
 
         EnemyPlane plane = new EnemyPlane(type, heading, px, py);
         clampIntoGap(plane);
         enemies.add(plane);
+
+        // Meeting a tougher model is what puts the matching gun upgrade into
+        // the drop pool.
+        seenPlaneTier = Math.max(seenPlaneTier, type.tier);
+    }
+
+    /**
+     * How far up the plane escalation this stage has got right now.
+     *
+     * Everything an earlier stage already unlocked is in the air from the
+     * first frame — otherwise every stage change would quietly roll the enemy
+     * roster back to light traffic. This stage's own new model joins
+     * HEAVY_PLANE_FRAME in, which is the "after a minute" beat.
+     */
+    private int planeTierCap() {
+        return frame >= HEAVY_PLANE_FRAME
+                ? stage.maxPlaneTier
+                : stage.maxPlaneTier - 1;
+    }
+
+    /**
+     * The gun rung currently on offer, or null if there is nothing to give.
+     * Only ever the single rung above the gun the player is holding, and only
+     * once they have met the plane that rung answers.
+     */
+    private GunTier offeredGunTier() {
+        GunTier next = player.getGunTier().next();
+        return next != null && seenPlaneTier >= next.unlockPlaneTier ? next : null;
+    }
+
+    // Killing this stage's boss is what clears it — there is no timeout win,
+    // so the run stays in the arena until the fight is finished.
+    private void clearStage() {
+        awaitingNextStage = !stage.last;
+        endGame(stage.last
+                ? "All Stages Clear!"
+                : "Stage " + stage.number + " Clear!",
+                Victory_sfx);
     }
 
     private void update() {
 
-        // Stage clear once this stage's full length is survived.
-        if (frame >= stage.durationSeconds * 60) {
-            awaitingNextStage = !stage.last;
-            endGame(stage.last
-                    ? "All Stages Clear!"
-                    : "Stage " + stage.number + " Clear!");
-            return;
+        // The boss is down and its explosion is playing — hold the run open
+        // for a beat, then show the clear screen.
+        if (clearDelayFrames >= 0) {
+            if (clearDelayFrames == 0) {
+                clearStage();
+                return;
+            }
+            clearDelayFrames--;
         }
 
         // Check enemy spawn (scripted spawns)
@@ -887,22 +1005,31 @@ private void drawDashboard(Graphics g) {
                     clampIntoGap(shield);
                     powerups.add(shield);
                     break;
-                case "PowerUp-Bullet":
-                    PowerUp bullet = new BulletUp(sd.x, sd.y);
-                    clampIntoGap(bullet);
-                    powerups.add(bullet);
-                    break;
                 default:
-                    System.out.println("Unknown enemy type: " + sd.type);
+                    // Any rung of the gun ladder, named by its spawn key.
+                    GunTier scripted = GunTier.forSpawnKey(sd.type);
+                    if (scripted != null) {
+                        PowerUp bullet = new BulletUp(sd.x, sd.y, scripted);
+                        clampIntoGap(bullet);
+                        powerups.add(bullet);
+                    } else {
+                        System.out.println("Unknown enemy type: " + sd.type);
+                    }
                     break;
             }
         }
+
+        // Once the boss is on the field the waves stop and the fight is a
+        // duel. It runs until the boss dies, and full-pressure waves on top of
+        // that — in a cave that has stopped scrolling — is not a fight anyone
+        // finishes. Power-up drops keep coming; a shield mid-fight is welcome.
+        boolean bossFight = scrollFrozen();
 
         // Random aliens from the front (right edge) at random heights. Both the
         // size of a wave and how often waves arrive follow the run-long
         // pressure ramp: one lonely alien every few seconds early on, packs of
         // two or three barely a second apart by the end of stage 2.
-        if (frame >= nextAlienSpawnFrame) {
+        if (!bossFight && frame >= nextAlienSpawnFrame) {
             double p = pressure();
 
             int count;
@@ -930,7 +1057,7 @@ private void drawDashboard(Graphics g) {
         // Enemy planes arrive alongside the alien waves but on their own,
         // slower cadence — they take twice the bullets and shoot back, so one
         // at a time is plenty. The gap follows the same pressure ramp.
-        if (frame >= nextPlaneSpawnFrame) {
+        if (!bossFight && frame >= nextPlaneSpawnFrame) {
             spawnPlane();
 
             int gap = (int) Math.round(PLANE_GAP_START
@@ -940,21 +1067,34 @@ private void drawDashboard(Graphics g) {
         }
 
         // A power-up drop every POWERUP_MIN..MAX seconds — rare enough to feel
-        // like a find, regular enough that there is always one on the way. The
-        // bullet flower is permanent, so it drops out of the pool once held.
+        // like a find, regular enough that there is always one on the way.
+        // Speed and shield are always on the table; the gun flower is only
+        // there when there is a rung left to climb and the player has met the
+        // plane it answers, so it drops out of the pool between escalations.
         if (frame >= nextPowerupFrame) {
             int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
+            GunTier gun = offeredGunTier();
             PowerUp drop;
-            switch (randomizer.nextInt(player.hasBulletFlower() ? 2 : 3)) {
-                case 0:
-                    drop = new SpeedUp(BOARD_WIDTH, py);
-                    break;
-                case 1:
-                    drop = new ShieldUp(BOARD_WIDTH, py);
-                    break;
-                default:
-                    drop = new BulletUp(BOARD_WIDTH, py);
-                    break;
+
+            if (gun != null && gun != lastGunOffered) {
+                // A rung just unlocked: the upgrade is the answer to the plane
+                // the player has only now met, so it arrives on the very next
+                // drop instead of waiting on a dice roll. Miss it and it goes
+                // back into the pool below like any other pickup.
+                drop = new BulletUp(BOARD_WIDTH, py, gun);
+                lastGunOffered = gun;
+            } else {
+                switch (randomizer.nextInt(gun == null ? 2 : 3)) {
+                    case 0:
+                        drop = new SpeedUp(BOARD_WIDTH, py);
+                        break;
+                    case 1:
+                        drop = new ShieldUp(BOARD_WIDTH, py);
+                        break;
+                    default:
+                        drop = new BulletUp(BOARD_WIDTH, py, gun);
+                        break;
+                }
             }
             clampIntoGap(drop);
             powerups.add(drop);
@@ -962,11 +1102,30 @@ private void drawDashboard(Graphics g) {
                     + randomizer.nextInt(POWERUP_MAX_SECONDS - POWERUP_MIN_SECONDS + 1)) * 60;
         }
 
-        // Boss schedule — per stage, timed to land in the map's wide sections.
-        if (bossSpawnIndex < stage.bossSeconds.length
-                && frame == stage.bossSeconds[bossSpawnIndex] * 60) {
-            enemies.add(new Boss(BOARD_WIDTH, playfieldBottom() / 2 - 40, playfieldBottom()));
-            bossSpawnIndex++;
+        // The extra-life heart, on its own slower clock so it doesn't crowd
+        // the other drops out. Lives are hard-capped, so at full health the
+        // heart is usually held back and reconsidered shortly — the odd one
+        // still comes through, and a life can always be lost while it drifts.
+        if (frame >= nextHeartFrame) {
+            if (lives < PLAYER_LIVES
+                    || randomizer.nextInt(HEART_FULL_LIVES_CHANCE) == 0) {
+                int hy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
+                PowerUp heart = new HeartUp(BOARD_WIDTH, hy);
+                clampIntoGap(heart);
+                powerups.add(heart);
+                nextHeartFrame = frame + (HEART_MIN_SECONDS
+                        + randomizer.nextInt(HEART_MAX_SECONDS - HEART_MIN_SECONDS + 1)) * 60;
+            } else {
+                nextHeartFrame = frame + HEART_RETRY_SECONDS * 60;
+            }
+        }
+
+        // The stage's one boss, timed to land in the map's wide arena. From
+        // here the cave stops scrolling and the stage ends when the boss dies.
+        if (!bossSpawned && frame >= stage.bossSecond * 60) {
+            enemies.add(new Boss(BOARD_WIDTH, playfieldBottom() / 2 - 40,
+                    playfieldBottom(), stage.number));
+            bossSpawned = true;
         }
 
         // player
@@ -985,17 +1144,29 @@ private void drawDashboard(Graphics g) {
             if (powerup.isVisible()) {
                 powerup.act();
                 if (powerup.collidesWith(player)) {
+                    gainLives(powerup.livesGranted()); // hearts; 0 for everything else
                     powerup.upgrade(player);
                 }
             }
         }
         powerups.removeIf(p -> !p.isVisible());
 
-        // Enemies
+        // Enemies. A boss hovers in place instead of flying past, so it is the
+        // one enemy that has to be told where the rock is: hand it the open
+        // corridor across its own width before it moves, and it turns around
+        // at the wall rather than sinking into it.
         for (Enemy enemy : enemies) {
-            if (enemy.isVisible()) {
-                enemy.act(direction);
+            if (!enemy.isVisible()) {
+                continue;
             }
+            if (enemy instanceof Boss) {
+                Boss boss = (Boss) enemy;
+                int[] gap = terrain.gapBounds(boss.getX(), boss.getWidth(),
+                        terrainScroll, playfieldBottom());
+                // Leave room under the boss for its HP bar, as before.
+                boss.setPatrolBounds(gap[0] + 8, gap[1] - boss.getHeight() - 20);
+            }
+            enemy.act(direction);
         }
 
         // Planes shoot on the same interval as the player's starting gun,
@@ -1043,7 +1214,7 @@ private void drawDashboard(Graphics g) {
         // score); the boss hovers over the terrain and is exempt.
         for (Enemy enemy : enemies) {
             if (enemy.isVisible() && !enemy.isDying() && !(enemy instanceof Boss)
-                    && terrain.collides(spriteRect(enemy, 6), frame, playfieldBottom())) {
+                    && terrain.collides(spriteRect(enemy, 6), terrainScroll, playfieldBottom())) {
                 enemy.setDying(true);
                 explosions.add(new Explosion(enemy.getX(), enemy.getY()));
             }
@@ -1056,6 +1227,16 @@ private void drawDashboard(Graphics g) {
             for (Enemy enemy : enemies) {
                 if (enemy.isVisible() && !enemy.isDying() && player.collidesWith(enemy)) {
                     if (player.isShieldActive()) {
+                        if (enemy instanceof Boss) {
+                            // A boss is too big to ram down. The shield takes
+                            // the hit and breaks — otherwise a single pickup
+                            // would skip the whole fight.
+                            player.breakShield();
+                            explodeAt(player.getX() + player.getWidth() / 2,
+                                    player.getY() + player.getHeight() / 2);
+                            invincibleFrames = HIT_INVINCIBLE_FRAMES;
+                            break;
+                        }
                         enemy.setDying(true);
                         explosions.add(new Explosion(enemy.getX(), enemy.getY()));
                         deaths += scoreFor(enemy);
@@ -1083,7 +1264,7 @@ private void drawDashboard(Graphics g) {
         // Player <-> wall: crashing into the cave costs a life. The
         // post-respawn blink protects here too; the golden shield does not.
         if (inGame && player.isVisible() && invincibleFrames == 0
-                && terrain.collides(spriteRect(player, 8), frame, playfieldBottom())) {
+                && terrain.collides(spriteRect(player, 8), terrainScroll, playfieldBottom())) {
             explosions.add(new Explosion(player.getX(), player.getY()));
             loseLife();
         }
@@ -1102,7 +1283,7 @@ private void drawDashboard(Graphics g) {
             bullet.act();
 
             if (bullet.isOffscreen()
-                    || terrain.collides(spriteRect(bullet, 1), frame, playfieldBottom())) {
+                    || terrain.collides(spriteRect(bullet, 1), terrainScroll, playfieldBottom())) {
                 bullet.die();
                 enemyShotsToRemove.add(bullet);
                 continue;
@@ -1128,10 +1309,13 @@ private void drawDashboard(Graphics g) {
         enemyShots.removeAll(enemyShotsToRemove);
 
         // shot
+        boolean bossKilled = false;
         List<Shot> shotsToRemove = new ArrayList<>();
         for (Shot shot : shots) {
 
             if (shot.isVisible()) {
+
+                shot.act(); // animates the bolt/charged bullets; movement is below
 
                 for (Enemy enemy : enemies) {
                     // Collision detection: shot and enemy
@@ -1146,6 +1330,11 @@ private void drawDashboard(Graphics g) {
                                 explodeAt(boss.getX() + boss.getWidth() / 2,
                                         boss.getY() + boss.getHeight() / 2);
                                 deaths += scoreFor(boss);
+                                bossKilled = true;
+                            } else {
+                                // A spark at the impact — with BOSS_HP this
+                                // high the player needs to see hits landing.
+                                explodeAt(shot.getX(), shot.getY());
                             }
                         } else if (enemy instanceof EnemyPlane) {
                             // Two default bullets bring a plane down; the
@@ -1184,7 +1373,7 @@ private void drawDashboard(Graphics g) {
                     } else {
                         shot.setX(newX);
                         // Bullets splash against the cave walls.
-                        if (terrain.collides(spriteRect(shot, 2), frame, playfieldBottom())) {
+                        if (terrain.collides(spriteRect(shot, 2), terrainScroll, playfieldBottom())) {
                             shot.die();
                             shotsToRemove.add(shot);
                         }
@@ -1194,8 +1383,14 @@ private void drawDashboard(Graphics g) {
         }
         shots.removeAll(shotsToRemove);
 
-        // Drop fully dead enemies so the list stays small over a 7-minute run.
+        // Drop fully dead enemies so the list stays small over a long run.
         enemies.removeIf(e -> !e.isVisible());
+
+        // The boss was this stage's win condition. Start the beat rather than
+        // clearing straight away, so its explosion gets a second on screen.
+        if (bossKilled) {
+            clearDelayFrames = STAGE_CLEAR_DELAY_FRAMES;
+        }
 
         // enemies
         // for (Enemy enemy : enemies) {
@@ -1267,6 +1462,12 @@ private void drawDashboard(Graphics g) {
 
     private void doGameCycle() {
         frame++;
+        // The world holds still for the boss fight: it runs until the boss
+        // dies rather than for a fixed time, so letting the cave keep scrolling
+        // would eventually drag the player out of the arena and into rock.
+        if (!scrollFrozen()) {
+            terrainScroll++;
+        }
         update();
         repaint();
     }
@@ -1316,12 +1517,14 @@ private void drawDashboard(Graphics g) {
             int key = e.getKeyCode();
 
             if (key == KeyEvent.VK_SPACE && inGame) {
-                System.out.println("Shots: " + shots.size());
-                if (shots.size() < 4 && player.canShoot()) {
+                // The concurrent cap has to leave room for a whole burst, or
+                // the top rungs of the gun could never spend all six shots.
+                int maxShots = Math.max(4, player.getShotsPerBurst());
+                if (shots.size() < maxShots && player.canShoot()) {
                     // Fire from the tip of the ship: right edge, vertically centered.
                     int tipX = player.getX() + player.getWidth();
                     int tipY = player.getY() + player.getHeight() / 2;
-                    Shot shot = new Shot(tipX, tipY, player.hasBulletFlower());
+                    Shot shot = new Shot(tipX, tipY, player.getGunTier());
                     shots.add(shot);
                     player.startShotCooldown();
                 }

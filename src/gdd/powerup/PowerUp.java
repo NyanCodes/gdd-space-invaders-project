@@ -45,5 +45,14 @@ package gdd.powerup;
 			}
 		}
 
+		/**
+		 * Extra lives this pickup is worth. Lives are run state owned by the
+		 * scene, not by the Player the way hull and the gun are, so the scene
+		 * applies this rather than {@link #upgrade}.
+		 */
+		public int livesGranted() {
+			return 0;
+		}
+
 		abstract public void upgrade(Player player);
 	}

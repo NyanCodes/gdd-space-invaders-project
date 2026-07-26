@@ -281,11 +281,32 @@ public class Terrain {
         return false;
     }
 
-    // Clamp a sprite's y so it sits inside the open corridor at screenX.
-    public int clampToGap(int screenX, int scroll, int desiredY, int spriteH, int fieldBottom) {
-        int[] col = column(Math.floorDiv(screenX + scroll, TILE));
-        int top = col[0] * TILE + 8;
-        int bottom = fieldBottom - col[1] * TILE - 8 - spriteH;
-        return Math.max(top, Math.min(desiredY, bottom));
+    /**
+     * The open corridor spanning [screenX, screenX + width) right now, as
+     * {top, bottom} screen pixels — the tightest column in that span wins.
+     *
+     * A sprite that hovers in place while the cave scrolls past it (the boss)
+     * needs the whole span, not just the column under its left edge.
+     */
+    public int[] gapBounds(int screenX, int width, int scroll, int fieldBottom) {
+        int firstCol = Math.floorDiv(screenX + scroll, TILE);
+        int lastCol = Math.floorDiv(screenX + Math.max(1, width) - 1 + scroll, TILE);
+        int top = 0;
+        int bottom = fieldBottom;
+        for (int c = firstCol; c <= lastCol; c++) {
+            int[] col = column(c);
+            top = Math.max(top, col[0] * TILE);
+            bottom = Math.min(bottom, fieldBottom - col[1] * TILE);
+        }
+        return new int[]{top, bottom};
+    }
+
+    // Clamp a sprite's y so it sits inside the open corridor it spans.
+    public int clampToGap(int screenX, int width, int scroll, int desiredY,
+            int spriteH, int fieldBottom) {
+        int[] gap = gapBounds(screenX, width, scroll, fieldBottom);
+        int top = gap[0] + 8;
+        int bottom = gap[1] - 8 - spriteH;
+        return Math.max(top, Math.min(desiredY, Math.max(top, bottom)));
     }
 }
