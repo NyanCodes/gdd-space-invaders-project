@@ -82,8 +82,7 @@ public class TitleScene extends JPanel {
 
     private void initAudio() {
         try {
-            String filePath = "src/audio/title.wav";
-            audioPlayer = new AudioPlayer(filePath);
+            audioPlayer = new AudioPlayer(Title_sfx);
 
             audioPlayer.play();
         } catch (Exception e) {
