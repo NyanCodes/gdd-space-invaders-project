@@ -6,10 +6,11 @@ import javax.swing.ImageIcon;
 
 public class Boss extends Enemy {
 
-    private int hp = BOSS_HP;
+    private int hp;
+    private final int maxHp;
     private int width;
     private int height;
-    private int vy = 3;
+    private int vy;
     // Patrol limits in screen pixels. Not fixed at spawn: Scene1 refreshes
     // them from the cave walls every frame (setPatrolBounds), so the boss
     // turns around at the rock instead of flying through it.
@@ -17,14 +18,21 @@ public class Boss extends Enemy {
     private int maxY;
     private final int holdX; // x where the boss stops and hovers
     private final int spreadCount; // bullets per volley
-    private int fireCooldown = BOSS_FIRE_COOLDOWN;
+    private final int fireCooldownMax; // frames between volleys, this stage's boss
+    private int fireCooldown;
 
     // playfieldBottom = y of the top of the dashboard; the boss patrols above
-    // it. The stage picks the artwork — so a stage always shows the same boss
-    // however many times it is replayed — and how many bullets a volley holds.
+    // it. The stage picks the artwork, HP, fire rate and patrol speed — so a
+    // stage always shows the same boss however many times it is replayed, and
+    // a later stage's boss can outright outgun an earlier one.
     public Boss(int x, int y, int playfieldBottom, Stage stage) {
         super(x, y);
 
+        this.maxHp = stage.bossHp;
+        this.hp = maxHp;
+        this.vy = stage.bossPatrolSpeed;
+        this.fireCooldownMax = stage.bossFireCooldown;
+        this.fireCooldown = fireCooldownMax;
         this.spreadCount = Math.max(1, stage.bossSpreadCount);
         String imagePath = IMG_Boss[Math.floorMod(stage.number - 1, IMG_Boss.length)];
         // Bigger than a regular alien: double the normal scale.
@@ -85,7 +93,7 @@ public class Boss extends Enemy {
 
     /** Restarts the trigger interval after Scene1 spawns the volley. */
     public void noteFired() {
-        fireCooldown = BOSS_FIRE_COOLDOWN;
+        fireCooldown = fireCooldownMax;
     }
 
     /** How many bullets one volley holds — 1, or a spread on later stages. */
@@ -132,7 +140,7 @@ public class Boss extends Enemy {
     }
 
     public int getMaxHp() {
-        return BOSS_HP;
+        return maxHp;
     }
 
     public int getWidth() {

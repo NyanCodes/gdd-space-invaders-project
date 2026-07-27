@@ -10,6 +10,7 @@ import gdd.Stage;
 import gdd.powerup.BulletUp;
 import gdd.powerup.HeartUp;
 import gdd.powerup.PowerUp;
+import gdd.powerup.RearGunUp;
 import gdd.powerup.ShieldUp;
 import gdd.powerup.SpeedUp;
 import gdd.sprite.Alien1;
@@ -19,6 +20,7 @@ import gdd.sprite.Enemy;
 import gdd.sprite.EnemyPlane;
 import gdd.sprite.EnemyShot;
 import gdd.sprite.Explosion;
+import gdd.sprite.Obstacle;
 import gdd.sprite.Player;
 import gdd.sprite.Shot;
 import gdd.sprite.Sprite;
@@ -58,6 +60,7 @@ public class Scene1 extends JPanel {
     private List<Explosion> explosions;
     private List<Shot> shots;
     private List<EnemyShot> enemyShots; // bullets fired by enemy planes
+    private List<Obstacle> obstacles; // stage 2's tumbling rock hazard
     private Player player;
     private Terrain terrain; // scrolling cave walls, top and bottom
     // private Shot shot;
@@ -75,9 +78,11 @@ public class Scene1 extends JPanel {
     private int invincibleFrames = 0; // blink window after a respawn
     private int nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
     private int nextPlaneSpawnFrame; // set from the stage in gameInit()
+    private int nextObstacleSpawnFrame = OBSTACLE_FIRST_FRAME; // stage.spawnsObstacles only
     private int nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
     private int nextHeartFrame = HEART_FIRST_SECONDS * 60; // hearts run their own clock
     private boolean bossSpawned = false; // one boss per stage, and only once
+    private boolean rearGunDropped = false; // the stage-2 rear-gun pickup, once per stage
     // Counts down from the killing blow to the clear screen; -1 when idle.
     private int clearDelayFrames = -1;
     // Toughest plane model the player has actually met. The gun ladder is
@@ -95,6 +100,7 @@ public class Scene1 extends JPanel {
     private Image tipIconShield;
     private Image tipIconBullet;
     private Image tipIconHeart;
+    private Image tipIconRearGun; // stage 2 only — shown when stage.rearGunPowerupSecond >= 0
 
     private boolean inGame = true;
     // Stage cleared but the game continues — the end screen offers NEXT STAGE
@@ -239,6 +245,7 @@ public class Scene1 extends JPanel {
         explosions = new ArrayList<>();
         shots = new ArrayList<>();
         enemyShots = new ArrayList<>();
+        obstacles = new ArrayList<>();
 
         // Reset run state so a scene can be started more than once.
         frame = 0;
@@ -247,10 +254,12 @@ public class Scene1 extends JPanel {
         deaths = carriedScore;
         invincibleFrames = 0;
         bossSpawned = false;
+        rearGunDropped = false;
         clearDelayFrames = -1;
         seenPlaneTier = 0;
         nextGunDropFrame = 0;
         nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
+        nextObstacleSpawnFrame = OBSTACLE_FIRST_FRAME;
         // Only stage 1 delays the first plane; stage 2 opens with them.
         nextPlaneSpawnFrame = stage.firstPlaneFrame;
         nextPowerupFrame = POWERUP_FIRST_SECONDS * 60;
@@ -286,6 +295,7 @@ public class Scene1 extends JPanel {
         tipIconShield = ImageUtil.fit(IMG_POWERUP_SHIELD[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
         tipIconBullet = ImageUtil.fit(IMG_POWERUP_BULLET[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
         tipIconHeart = ImageUtil.fit(IMG_POWERUP_HEART[0], TIP_ICON_SIZE, TIP_ICON_SIZE);
+        tipIconRearGun = RearGunUp.previewIcon(TIP_ICON_SIZE);
     }
 
     /**
@@ -502,6 +512,15 @@ public class Scene1 extends JPanel {
         }
     }
 
+    private void drawObstacles(Graphics g) {
+
+        for (Obstacle rock : obstacles) {
+            if (rock.isVisible()) {
+                g.drawImage(rock.getImage(), rock.getX(), rock.getY(), this);
+            }
+        }
+    }
+
     private void drawPowreUps(Graphics g) {
 
         for (PowerUp p : powerups) {
@@ -625,6 +644,7 @@ public class Scene1 extends JPanel {
             drawTerrain(g);     // cave walls along the top and bottom
             drawExplosions(g);
             drawPowreUps(g);
+            drawObstacles(g);   // stage 2's tumbling rocks
             drawAliens(g);
             drawPlayer(g);
             drawShot(g);
@@ -676,8 +696,14 @@ public class Scene1 extends JPanel {
         }
 
         // One row per pickup, so the box grows if another is ever added.
-        Image[] icons = {tipIconSpeed, tipIconShield, tipIconBullet, tipIconHeart};
-        String[] labels = {"SPEED UP", "SHIELD", "BULLET x2", "EXTRA LIFE"};
+        // The rear-gun row only applies to stages that actually drop it.
+        boolean showRearGun = stage.rearGunPowerupSecond >= 0;
+        Image[] icons = showRearGun
+                ? new Image[]{tipIconSpeed, tipIconShield, tipIconBullet, tipIconHeart, tipIconRearGun}
+                : new Image[]{tipIconSpeed, tipIconShield, tipIconBullet, tipIconHeart};
+        String[] labels = showRearGun
+                ? new String[]{"SPEED UP", "SHIELD", "BULLET x2", "EXTRA LIFE", "REAR FIRE"}
+                : new String[]{"SPEED UP", "SHIELD", "BULLET x2", "EXTRA LIFE"};
         int rowH = 28;
 
         int panelW = getWidth() > 0 ? getWidth() : BOARD_WIDTH;
@@ -1156,6 +1182,24 @@ private void drawDashboard(Graphics g) {
                     + randomizer.nextInt(PLANE_GAP_JITTER);
         }
 
+        // Stage 2's tumbling rocks — always a large one from the right edge;
+        // it splits into smaller pieces on its own once shot. Same pressure
+        // ramp as the alien/plane waves, and stops spawning once the boss
+        // fight starts (existing rocks keep drifting, they just don't renew).
+        if (stage.spawnsObstacles && !bossFight && frame >= nextObstacleSpawnFrame) {
+            int oy = 10 + randomizer.nextInt(
+                    Math.max(1, playfieldBottom() - Obstacle.Size.LARGE.getPx() - 20));
+            Obstacle rock = new Obstacle(Obstacle.Size.LARGE,
+                    BOARD_WIDTH + randomizer.nextInt(80), oy);
+            clampIntoGap(rock);
+            obstacles.add(rock);
+
+            int gap = (int) Math.round(OBSTACLE_GAP_START
+                    - (OBSTACLE_GAP_START - OBSTACLE_GAP_END) * pressure());
+            nextObstacleSpawnFrame = frame + gap
+                    + randomizer.nextInt(OBSTACLE_GAP_JITTER);
+        }
+
         // A power-up drop every POWERUP_MIN..MAX seconds — rare enough to feel
         // like a find, regular enough that there is always one on the way.
         // The gun flower has its own clock (dueGunTier, right below) instead
@@ -1215,6 +1259,18 @@ private void drawDashboard(Graphics g) {
             bossSpawned = true;
         }
 
+        // Stage 2's rear-gun pickup — a scripted one-off rather than the
+        // random pool, so it reliably turns up early (see
+        // Stage.rearGunPowerupSecond; -1 on stages that never drop it).
+        if (!rearGunDropped && stage.rearGunPowerupSecond >= 0
+                && frame >= stage.rearGunPowerupSecond * 60) {
+            int gy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
+            PowerUp rearGun = new RearGunUp(BOARD_WIDTH, gy);
+            clampPowerUpIntoGap(rearGun);
+            powerups.add(rearGun);
+            rearGunDropped = true;
+        }
+
         // player
         if (invincibleFrames > 0) {
             invincibleFrames--;
@@ -1255,6 +1311,15 @@ private void drawDashboard(Graphics g) {
             } else {
                 enemy.act(direction);
                 dodgeTerrain(enemy); // fly around the cave, not into it
+            }
+        }
+
+        // Rocks tumble on their own physics, terrain-agnostic — they drift
+        // through the cave rather than steering around it, same as the
+        // debris field they represent.
+        for (Obstacle rock : obstacles) {
+            if (rock.isVisible()) {
+                rock.act();
             }
         }
 
@@ -1372,6 +1437,31 @@ private void drawDashboard(Graphics g) {
             }
         }
 
+        // Player <-> rock: ramming one costs a life the same as an alien
+        // collision, but the rock survives the hit — only sustained fire
+        // brings one down. Too solid to shrug off like a regular enemy, so a
+        // shielded ram breaks the shield rather than killing it for free,
+        // same as ramming the boss.
+        if (player.isVisible()) {
+            for (Obstacle rock : obstacles) {
+                if (rock.isVisible() && player.collidesWith(rock)) {
+                    if (player.isShieldActive()) {
+                        player.breakShield();
+                        explodeAt(player.getX() + player.getWidth() / 2,
+                                player.getY() + player.getHeight() / 2);
+                        invincibleFrames = HIT_INVINCIBLE_FRAMES;
+                        break;
+                    }
+                    if (invincibleFrames > 0) {
+                        break; // still blinking after a respawn or a hit
+                    }
+                    explosions.add(new Explosion(player.getX(), player.getY()));
+                    loseLife();
+                    break;
+                }
+            }
+        }
+
         // Player <-> wall: crashing into the cave costs a life. The
         // post-respawn blink protects here too; the golden shield does not.
         if (inGame && player.isVisible() && invincibleFrames == 0
@@ -1473,14 +1563,40 @@ private void drawDashboard(Graphics g) {
                     }
                 }
 
+                // Collision detection: shot and rock. Chips one hit point off
+                // regardless of the player's per-bullet damage — rocks are a
+                // hazard to clear with sustained fire, not a hull-point fight.
+                if (shot.isVisible()) {
+                    for (Obstacle rock : obstacles) {
+                        if (rock.isVisible() && shot.collidesWith(rock)) {
+                            if (rock.hit()) {
+                                rock.die();
+                                explodeAt(rock.getX() + rock.getImage().getWidth(null) / 2,
+                                        rock.getY() + rock.getImage().getHeight(null) / 2);
+                                deaths += rock.getSize().getScore();
+                                obstacles.addAll(rock.split());
+                            } else {
+                                // Still in one piece — a spark at the impact.
+                                explodeAt(shot.getX(), shot.getY());
+                            }
+                            shot.die();
+                            shotsToRemove.add(shot);
+                            break;
+                        }
+                    }
+                }
+
                 // Shots travel along their own heading at the player's bullet
                 // speed; remove once off the right edge, or — for the angled
-                // bullets in a fan — off the top or bottom of the playfield.
+                // bullets in a fan, and the rear volley on stages that fire
+                // both ways — off the left, top or bottom of the playfield.
                 if (shot.isVisible()) {
                     shot.advance(player.getShotSpeed());
 
+                    int shotW = shot.getImage().getWidth(null);
                     int shotH = shot.getImage().getHeight(null);
                     if (shot.getX() > BOARD_WIDTH
+                            || shot.getX() + shotW < 0
                             || shot.getY() + shotH < 0
                             || shot.getY() > playfieldBottom()) {
                         shot.die();
@@ -1498,6 +1614,7 @@ private void drawDashboard(Graphics g) {
 
         // Drop fully dead enemies so the list stays small over a long run.
         enemies.removeIf(e -> !e.isVisible());
+        obstacles.removeIf(o -> !o.isVisible());
 
         // The boss was this stage's win condition. Start the beat rather than
         // clearing straight away, so its explosion gets a second on screen.
@@ -1635,8 +1752,10 @@ private void drawDashboard(Graphics g) {
                 // on screen at once.
                 GunTier tier = player.getGunTier();
                 int volley = player.getVolleyShots();
-                int maxShots = Math.max(8, volley * 3);
-                if (shots.size() + volley <= maxShots && player.canShoot()) {
+                boolean rearFire = player.hasRearFire();
+                int shotsPerPull = rearFire ? volley * 2 : volley;
+                int maxShots = Math.max(8, shotsPerPull * 3);
+                if (shots.size() + shotsPerPull <= maxShots && player.canShoot()) {
                     // Fire from the tip of the ship: right edge, vertically
                     // centered. The whole volley leaves at the same moment,
                     // fanned out around straight ahead.
@@ -1644,6 +1763,15 @@ private void drawDashboard(Graphics g) {
                     int tipY = player.getY() + player.getHeight() / 2;
                     for (int i = 0; i < volley; i++) {
                         shots.add(new Shot(tipX, tipY, tier, tier.angleFor(i)));
+                    }
+                    // Once the rear-gun pickup is collected, the gun answers
+                    // out the tail too: the same fan, mirrored to fire left
+                    // instead of right.
+                    if (rearFire) {
+                        int tailX = player.getX();
+                        for (int i = 0; i < volley; i++) {
+                            shots.add(new Shot(tailX, tipY, tier, 180 - tier.angleFor(i)));
+                        }
                     }
                     player.startShotCooldown();
                 }

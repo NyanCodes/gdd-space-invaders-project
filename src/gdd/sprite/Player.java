@@ -31,6 +31,11 @@ public class Player extends Sprite {
     private int volleyShots = GunTier.BASE.volleyShots;
     private int shotDamage = GunTier.BASE.damage; // damage a single bullet deals
 
+    // Granted by the stage-2 RearGunUp pickup: fires the same volley out the
+    // tail as well as the front. Off by default and, like the gun ladder,
+    // never lost once picked up.
+    private boolean rearFire = false;
+
     private Rectangle bounds = new Rectangle(175,135,17,32);
 
     public Player() {
@@ -149,6 +154,15 @@ public class Player extends Sprite {
         }
     }
 
+    /** Grants the rear-gun pickup. Permanent, like the gun ladder. */
+    public void enableRearFire() {
+        rearFire = true;
+    }
+
+    public boolean hasRearFire() {
+        return rearFire;
+    }
+
     public void activateShield(int frames) {
         shieldFrames = frames;
     }
@@ -206,12 +220,13 @@ public class Player extends Sprite {
         x += dx;
         y += dy;
 
-        // Clamp to the left region so the player can't cross the whole screen.
+        // Clamp horizontally so the ship stays fully on-screen, free to roam
+        // the whole board rather than just the left half.
         if (x < 2) {
             x = 2;
         }
-        if (x > BOARD_WIDTH / 2) {
-            x = BOARD_WIDTH / 2;
+        if (x > BOARD_WIDTH - width) {
+            x = BOARD_WIDTH - width;
         }
 
         // Clamp vertically so the ship stays fully on-screen.

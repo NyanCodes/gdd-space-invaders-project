@@ -52,6 +52,22 @@ public class Stage {
     // BOSS_SPREAD_COUNT of them BOSS_SPREAD_DEGREES apart, so the player has
     // to move rather than sidestep one line.
     public final int bossSpreadCount;
+    // This stage's boss hit points, fire cooldown (frames between volleys)
+    // and vertical patrol speed (px/frame). Stage 2's boss is the last fight
+    // in the run, so it outguns stage 1's on every one of these rather than
+    // just reusing the same numbers behind different art.
+    public final int bossHp;
+    public final int bossFireCooldown;
+    public final int bossPatrolSpeed;
+
+    // Second this stage's rear-gun pickup (gdd.powerup.RearGunUp) appears, or
+    // -1 if it never does. Stage 1 keeps every plane in front, so a rear
+    // volley would meet nothing; stage 2 opens the back edge to planes
+    // (planesFromBehind), and the pickup is the player's answer to that.
+    public final int rearGunPowerupSecond;
+    // Tumbling space-rock hazard (see gdd.sprite.Obstacle), stage 2 only —
+    // one more thing to dodge or shoot through on top of the plane traffic.
+    public final boolean spawnsObstacles;
 
     // Where this stage sits on the run-long enemy pressure ramp (0 = a couple
     // of aliens drifting in, 1 = full pressure). Each stage picks up where the
@@ -67,7 +83,9 @@ public class Stage {
             boolean planesFromBehind, int[] planeTierFrames,
             GunTier startingGun, int gunUpgradeFirstSeconds,
             int gunUpgradeIntervalSeconds, GunTier gunTierCeiling,
-            int bossSpreadCount) {
+            int bossSpreadCount, int bossHp, int bossFireCooldown,
+            int bossPatrolSpeed, int rearGunPowerupSecond,
+            boolean spawnsObstacles) {
         this.number = number;
         this.mapPath = mapPath;
         this.bossSecond = bossSecond;
@@ -82,6 +100,11 @@ public class Stage {
         this.gunUpgradeIntervalSeconds = gunUpgradeIntervalSeconds;
         this.gunTierCeiling = gunTierCeiling;
         this.bossSpreadCount = bossSpreadCount;
+        this.bossHp = bossHp;
+        this.bossFireCooldown = bossFireCooldown;
+        this.bossPatrolSpeed = bossPatrolSpeed;
+        this.rearGunPowerupSecond = rearGunPowerupSecond;
+        this.spawnsObstacles = spawnsObstacles;
     }
 
     // Cold start: BASE gun, first flower at 1:00, then a rung every 20s
@@ -92,7 +115,8 @@ public class Stage {
             Global.STAGE_1_PLANE_TIER_FRAMES, GunTier.BASE,
             Global.GUN_UPGRADE_STAGE1_FIRST_SECONDS,
             Global.GUN_UPGRADE_INTERVAL_SECONDS, GunTier.EIGHT,
-            Global.BOSS_SPREAD_COUNT);
+            Global.BOSS_SPREAD_COUNT, Global.BOSS_HP, Global.BOSS_FIRE_COOLDOWN,
+            Global.BOSS_PATROL_SPEED, -1, false);
 
     // Stage 2 is entered on the 2x gun and eased in: no planes at all for the
     // first STAGE_2_FIRST_PLANE_FRAME, then light traffic, heavies at 0:30 and
@@ -100,12 +124,17 @@ public class Stage {
     // available from frame 0 made its first minute harder than its boss. The
     // gun ladder picks up where stage 1 left off in spirit (not carried gun
     // itself, but the same climb) — due for 4X at 0:20 and climbing every 20s
-    // up to 10X at 1:20.
+    // up to 10X at 1:20. Its boss is the final fight of the run — tougher,
+    // faster and firing more often than stage 1's — and it adds tumbling
+    // rock hazards and a rear-gun pickup (0:03) on top of the two-sided
+    // plane traffic.
     public static final Stage TWO = new Stage(2, Global.MAP_LEVEL_2,
             Global.STAGE_2_BOSS_SECOND, true,
             0.45, 1.0, Global.STAGE_2_FIRST_PLANE_FRAME, true,
             Global.STAGE_2_PLANE_TIER_FRAMES, GunTier.FLOWER,
             Global.GUN_UPGRADE_STAGE2_FIRST_SECONDS,
             Global.GUN_UPGRADE_INTERVAL_SECONDS, GunTier.TEN,
-            Global.BOSS_SPREAD_COUNT);
+            Global.BOSS_SPREAD_COUNT, Global.BOSS_HP_STAGE2,
+            Global.BOSS_FIRE_COOLDOWN_STAGE2, Global.BOSS_PATROL_SPEED_STAGE2,
+            Global.REAR_GUN_POWERUP_SECOND, true);
 }

@@ -66,21 +66,28 @@ public class Global {
     // the run is at its hardest the moment the boss shows up.
     public static final String MAP_LEVEL_1 = "src/maps/level1.txt";
     public static final String MAP_LEVEL_2 = "src/maps/level2.txt";
-    public static final int STAGE_1_BOSS_SECOND = 150; // 2:30
+    public static final int STAGE_1_BOSS_SECOND = 120; // 2:00
     public static final int STAGE_2_BOSS_SECOND = 180; // 3:00
 
     // Boss. One per stage, and killing it is what clears the stage — so it is
-    // a real fight: 24 default bullets, or 12 with the bullet flower.
-    public static final int BOSS_HP = 24;
+    // a real fight: 40 default bullets, or 20 with the bullet flower. Stage
+    // 2's boss is the last fight of the run and outguns stage 1's outright —
+    // more HP, a shorter fire cooldown and a faster patrol (see
+    // Stage.bossHp/bossFireCooldown/bossPatrolSpeed).
+    public static final int BOSS_HP = 40;
+    public static final int BOSS_HP_STAGE2 = 56;
     // Boss fire. It shoots on a tighter interval than the planes, and a hit
     // costs a hull point exactly like plane fire does. Every stage's boss
     // fires a three-way spread on the same beat, so the player has to move
     // rather than sidestep one line.
-    public static final int BOSS_FIRE_COOLDOWN = 60;   // frames between volleys (1s)
+    public static final int BOSS_FIRE_COOLDOWN = 60;   // frames between volleys (1s), stage 1
+    public static final int BOSS_FIRE_COOLDOWN_STAGE2 = 45; // 0.75s — fires more often
     public static final int BOSS_SHOT_SPEED = 11;      // px per frame, vs PLANE_SHOT_SPEED 7
     public static final int BOSS_SPREAD_COUNT = 3;     // bullets in a volley
     public static final int BOSS_SPREAD_DEGREES = 45;  // angle between them
     public static final int BOSS_SHOT_SIZE = 30;       // bullet art fits this box, px
+    public static final int BOSS_PATROL_SPEED = 3;        // px/frame vertical patrol, stage 1
+    public static final int BOSS_PATROL_SPEED_STAGE2 = 4; // stage 2's boss patrols faster
     // A beat between the killing blow and the clear screen, so the player sees
     // the boss go up rather than the screen flipping mid-explosion.
     public static final int STAGE_CLEAR_DELAY_FRAMES = 60; // 1s
@@ -139,6 +146,20 @@ public class Global {
     public static final int PLANE_GAP_START = 150; // frames between planes at zero pressure
     public static final int PLANE_GAP_END = 90;    // ...and at full pressure
     public static final int PLANE_GAP_JITTER = 50; // random slack added to every gap
+
+    // Stage 2 hazard: tumbling space rocks (see gdd.sprite.Obstacle), on their
+    // own cadence alongside the alien/plane waves and riding the same
+    // pressure ramp — rare early on, more frequent as the stage tightens.
+    public static final int OBSTACLE_FIRST_FRAME = 300; // first rock, 5s in
+    public static final int OBSTACLE_GAP_START = 220; // frames between rocks at zero pressure
+    public static final int OBSTACLE_GAP_END = 100;    // ...and at full pressure
+    public static final int OBSTACLE_GAP_JITTER = 60;  // random slack added to every gap
+
+    // Stage 2 only: a one-off pickup (see gdd.powerup.RearGunUp) that
+    // permanently grants a mirrored rear volley. It turns up early —
+    // planes can already attack from behind (Stage.planesFromBehind) from
+    // the start of the stage, so the answer to that should too.
+    public static final int REAR_GUN_POWERUP_SECOND = 3; // 0:03
 
     // Power-ups
     public static final int POWERUP_SIZE = 40; // pickup sprite box, px
