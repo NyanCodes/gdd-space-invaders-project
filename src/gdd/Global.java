@@ -188,9 +188,17 @@ public class Global {
     // nothing visually and is what lets a plane crossing the map against the
     // scroll (3 px/frame relative to the terrain) clear a 2-tile wall step.
     public static final int ENEMY_DODGE_SPEED = 7;
-    // Clearance an enemy tries to hold off the rock face, px. A little margin
-    // keeps them from grazing the surface pixel-perfectly all the way along.
-    public static final int ENEMY_DODGE_MARGIN = 6;
+    // Open air an enemy holds between itself and each rock face, px.
+    //
+    // This is a fairness rule, not a cosmetic one. The gun fires straight right
+    // from the middle of the ship, so to line up on an enemy the player has to
+    // fly to its altitude — and the ship is 72x48 with walls that kill on
+    // contact. An enemy grazing the rock could only be answered by parking
+    // against the rock, so anything hugging a wall was effectively unshootable.
+    // A tile and a half means the player's whole sprite clears the rock while
+    // lined up. Even level 2's tightest 256 px corridor keeps a 160 px band,
+    // which comfortably holds the 66 px heavy planes.
+    public static final int ENEMY_DODGE_MARGIN = 48;
     // How far along the corridor an enemy watches. Without this it would only
     // react once the rock was already on top of it. Do not raise this much:
     // the sampled span takes the tightest column across it, so an over-wide

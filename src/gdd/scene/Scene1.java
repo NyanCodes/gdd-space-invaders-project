@@ -336,6 +336,10 @@ public class Scene1 extends JPanel {
      * moving at most ENEMY_DODGE_SPEED this frame so it banks around the rock
      * instead of snapping to a new height.
      *
+     * It holds ENEMY_DODGE_MARGIN of open air off each rock face, which is what
+     * keeps enemies shootable: the gun only fires straight right, so an enemy
+     * grazing a wall could only be answered by parking against that wall.
+     *
      * It looks ENEMY_DODGE_LOOKAHEAD either side of itself and obeys the
      * tightest column in that span, which is what makes it start climbing
      * before the wall arrives rather than once it is already inside it.
