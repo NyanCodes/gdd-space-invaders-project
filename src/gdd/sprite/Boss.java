@@ -9,7 +9,7 @@ public class Boss extends Enemy {
     private int hp = BOSS_HP;
     private int width;
     private int height;
-    private int vy = 2;
+    private int vy = 3;
     // Patrol limits in screen pixels. Not fixed at spawn: Scene1 refreshes
     // them from the cave walls every frame (setPatrolBounds), so the boss
     // turns around at the rock instead of flying through it.
@@ -56,8 +56,8 @@ public class Boss extends Enemy {
     @Override
     public void act(int direction) {
         if (x > holdX) {
-            // Slow entrance from the right edge.
-            x -= 1;
+            // Entrance from the right edge.
+            x -= 2;
         } else {
             // Patrol up and down in front of the player.
             y += vy;

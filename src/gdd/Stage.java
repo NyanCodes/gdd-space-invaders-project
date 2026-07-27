@@ -48,9 +48,9 @@ public class Stage {
     // it — stage 1 tops out at 8x, stage 2 (which starts higher) tops out at
     // the last rung, 10x.
     public final GunTier gunTierCeiling;
-    // Bullets in one volley from this stage's boss. Stage 1 lobs a single fast
-    // aimed shot; stage 2 fans BOSS_SPREAD_COUNT of them BOSS_SPREAD_DEGREES
-    // apart, so the player has to move rather than sidestep one line.
+    // Bullets in one volley from this stage's boss: both stages fan
+    // BOSS_SPREAD_COUNT of them BOSS_SPREAD_DEGREES apart, so the player has
+    // to move rather than sidestep one line.
     public final int bossSpreadCount;
 
     // Where this stage sits on the run-long enemy pressure ramp (0 = a couple
@@ -91,7 +91,8 @@ public class Stage {
             0.0, 0.45, Global.PLANE_FIRST_WAVE_FRAME, false,
             Global.STAGE_1_PLANE_TIER_FRAMES, GunTier.BASE,
             Global.GUN_UPGRADE_STAGE1_FIRST_SECONDS,
-            Global.GUN_UPGRADE_INTERVAL_SECONDS, GunTier.EIGHT, 1);
+            Global.GUN_UPGRADE_INTERVAL_SECONDS, GunTier.EIGHT,
+            Global.BOSS_SPREAD_COUNT);
 
     // Stage 2 is entered on the 2x gun and eased in: no planes at all for the
     // first STAGE_2_FIRST_PLANE_FRAME, then light traffic, heavies at 0:30 and

@@ -73,13 +73,12 @@ public class Global {
     // a real fight: 24 default bullets, or 12 with the bullet flower.
     public static final int BOSS_HP = 24;
     // Boss fire. It shoots on a tighter interval than the planes, and a hit
-    // costs a hull point exactly like plane fire does. Stage 1's boss lobs one
-    // aimed bullet, fast enough that standing still is not an option; stage 2's
-    // fires a three-way spread on the same beat, which is three times the
-    // volume rather than three times the rate.
+    // costs a hull point exactly like plane fire does. Every stage's boss
+    // fires a three-way spread on the same beat, so the player has to move
+    // rather than sidestep one line.
     public static final int BOSS_FIRE_COOLDOWN = 60;   // frames between volleys (1s)
     public static final int BOSS_SHOT_SPEED = 11;      // px per frame, vs PLANE_SHOT_SPEED 7
-    public static final int BOSS_SPREAD_COUNT = 3;     // bullets in a stage 2 volley
+    public static final int BOSS_SPREAD_COUNT = 3;     // bullets in a volley
     public static final int BOSS_SPREAD_DEGREES = 45;  // angle between them
     public static final int BOSS_SHOT_SIZE = 30;       // bullet art fits this box, px
     // A beat between the killing blow and the clear screen, so the player sees
