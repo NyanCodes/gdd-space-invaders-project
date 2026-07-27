@@ -18,3 +18,8 @@ This project is based from this
  - Two bullets from the enemy plane or from boss cost a life
  - One bullet hit makes shield disappears
  - you can hit enemies with active shield, without using a bullet
+
+ ### Members
+ - Nyan Myo Sett - 6722049
+ - S Kyaw Zin Oo - 6726012
+ - Tay Zar Aung Htet - 6722113
