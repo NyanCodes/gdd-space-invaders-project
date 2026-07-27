@@ -34,11 +34,15 @@ public class Global {
     public static final int PLAYER_LIVES = 3;
     public static final int DASHBOARD_HEIGHT = 64; // bottom status bar
 
-    // The ship's starting gun and engine. Enemy planes fire on the same
-    // interval, so these are the single source for "the player's default".
+    // The ship's starting gun and engine.
     public static final int PLAYER_SPEED = 5; // px per frame; ~120 px/s
     public static final int PLAYER_SHOT_SPEED = 20; // px per frame a bullet travels
-    public static final int PLAYER_SHOT_COOLDOWN = 90; // frames between shots (1.5s)
+    // The gun fires its whole volley on one trigger pull, so this is the only
+    // thing pacing the player's fire — kept short enough that shooting feels
+    // continuous rather than metered.
+    public static final int PLAYER_SHOT_COOLDOWN = 36; // frames between volleys (0.6s)
+    public static final int PLAYER_SHOT_COOLDOWN_FLOOR = 20; // fastest SpeedUp can make it
+    public static final int SPEEDUP_COOLDOWN_REDUCTION = 4; // frames off per SpeedUp
 
     // Hull points. Enemy fire chips away at this — plane collisions, plane
     // bullets and boss bullets — while a cave wall, an alien, or ramming the
@@ -120,10 +124,10 @@ public class Global {
     // pool on equal footing and climb to this many times the share of a light
     // plane as the stage's pressure ramp tops out.
     public static final int HEAVY_PLANE_MAX_WEIGHT = 3;
-    // Same trigger rhythm as the player's starting gun, and a bullet slow
-    // enough to dodge — plane fire is aimed, so it does not need the player's
+    // Set independently of the player's cooldown, and a bullet slow enough
+    // to dodge — plane fire is aimed, so it does not need the player's
     // 20 px/frame to be dangerous.
-    public static final int PLANE_FIRE_COOLDOWN = PLAYER_SHOT_COOLDOWN;
+    public static final int PLANE_FIRE_COOLDOWN = 90; // frames between shots (1.5s)
     public static final int PLANE_SHOT_SPEED = 7; // px per frame along the aim line
     public static final int PLANE_SHOT_SCALE = SCALE_FACTOR * 2; // bullet art scale
     public static final Color PLANE_SHOT_COLOR = new Color(255, 80, 40); // hostile red
@@ -145,18 +149,22 @@ public class Global {
     public static final int POWERUP_MIN_SECONDS = 35;   // gap between random drops
     public static final int POWERUP_MAX_SECONDS = 55;
     public static final int SHIELD_DURATION_SECONDS = 10; // golden shield lifetime
+    // Keeps drops off the very top of the playfield and the dashboard, even
+    // where an open cave corridor would otherwise let them drift right up
+    // against the edge.
+    public static final int POWERUP_EDGE_MARGIN = 40;
 
     // The red heart: one extra life, capped at PLAYER_LIVES. It runs on its
     // own timer rather than joining the drop pool, so adding it doesn't make
     // the speed / shield / gun flowers any rarer.
     public static final int HEART_FIRST_SECONDS = 45;
-    public static final int HEART_MIN_SECONDS = 60;
-    public static final int HEART_MAX_SECONDS = 90;
+    public static final int HEART_MIN_SECONDS = 40;
+    public static final int HEART_MAX_SECONDS = 65;
     // Lives are hard-capped, so a heart caught at full lives is wasted. At
     // full health the drop is usually held back — 1 in this many still comes
     // through, which keeps them part of the scenery and gives the player
     // something to run for if they get hit while one is drifting past.
-    public static final int HEART_FULL_LIVES_CHANCE = 4;
+    public static final int HEART_FULL_LIVES_CHANCE = 3;
     // How soon to reconsider after holding one back. Short, so a heart turns
     // up quickly once the player actually loses a life.
     public static final int HEART_RETRY_SECONDS = 12;
@@ -164,14 +172,30 @@ public class Global {
     public static final int TIP_ICON_SIZE = 22; // power-up icons inside that box
 
     // The gun ladder (see gdd.GunTier). Every rung above the first fires the
-    // same double-damage bullet; what a rung buys is more shots before the
+    // same double-damage bullet; what a rung buys is a wider volley — the
+    // whole rung goes off at once, in a fan, and only then does the gun
     // reload. Bullets get a little bigger each rung so the upgrade reads on
     // screen as well as on the HUD.
     public static final int BULLET_DAMAGE = 2;
-    public static final int BULLET_SHOTS_PER_BURST = 2;  // bullet flower
-    public static final int BOLT_SHOTS_PER_BURST = 4;    // bolt flower
-    public static final int CHARGED_SHOTS_PER_BURST = 6; // charged flower
-    public static final int BULLET_BURST_GAP_FRAMES = 12; // pause between burst shots
+    public static final int BULLET_VOLLEY_SHOTS = 2;  // bullet flower
+    public static final int BOLT_VOLLEY_SHOTS = 4;    // bolt flower
+    public static final int CHARGED_VOLLEY_SHOTS = 6; // charged flower
+    public static final int EIGHT_VOLLEY_SHOTS = 8;   // eight flower
+    public static final int TEN_VOLLEY_SHOTS = 10;    // ten flower, top of the ladder
+    // Half-width of each rung's fan, in degrees off straight ahead — the
+    // outermost bullet's angle. The rest are spaced evenly inside it, which
+    // leaves the innermost pair within ~10 degrees at every rung so a target
+    // dead ahead is still covered. Enemies only ever come from the right, so
+    // the fan stays forward-facing: a rearward bullet would meet nothing.
+    //
+    // The reach tapers as the rungs climb (+16, +16, +12, +8): past roughly
+    // 60 degrees a bullet is travelling more up than forward, so the top rungs
+    // spend their extra bullets thickening the fan rather than widening it.
+    public static final int BULLET_SPREAD_DEGREES = 10;
+    public static final int BOLT_SPREAD_DEGREES = 26;
+    public static final int CHARGED_SPREAD_DEGREES = 42;
+    public static final int EIGHT_SPREAD_DEGREES = 54;
+    public static final int TEN_SPREAD_DEGREES = 62;
     public static final int BULLET_SHOT_SPEED_BONUS = 8;
     public static final int BULLET_ANIM_FRAMES = 4; // game frames per bullet art frame
     public static final int SHOT2_WIDTH = 26;  // powered bullet is drawn to fit this box
@@ -180,6 +204,22 @@ public class Global {
     public static final int BOLT_HEIGHT = 20;
     public static final int CHARGED_WIDTH = 36;
     public static final int CHARGED_HEIGHT = 28;
+    // 8X and 10X reuse the charged bolt's animated bullet art rather than
+    // getting their own — only the first rung (the flower) ever changes the
+    // bullet itself, so the top two rungs share CHARGED's frames and box.
+
+    // The gun ladder's own clock (see GunTier, Stage.gunUpgradeFirstSeconds).
+    // Stage 1 starts on BASE and gets its first flower at 1:00, then a rung
+    // every GUN_UPGRADE_INTERVAL_SECONDS after that (1:20, 1:40, 2:00 for
+    // 4X/6X/8X) so the ladder tops out at 8X just before its 2:30 boss.
+    // Stage 2 starts already on the 2X flower, so its first climb (to 4X) is
+    // due almost immediately.
+    public static final int GUN_UPGRADE_STAGE1_FIRST_SECONDS = 60;
+    public static final int GUN_UPGRADE_STAGE2_FIRST_SECONDS = 20;
+    public static final int GUN_UPGRADE_INTERVAL_SECONDS = 20;
+    // If a scheduled rung drifts off-screen uncollected, how soon to try
+    // dropping it again rather than waiting out the next stage's clock.
+    public static final int GUN_DROP_RETRY_SECONDS = 15;
 
     // Enemies fly around the cave rather than dying in it. This is the most an
     // enemy may move vertically in one frame — a **cap**, not a speed: it only
@@ -366,6 +406,46 @@ public class Global {
         "src/images/powerUps/charged/charged14.png",
         "src/images/powerUps/charged/charged15.png",
         "src/images/powerUps/charged/charged16.png",
+    };
+
+    // Green "8X" flower — same derivation as bolt/charged above.
+    public static final String IMG_POWERUP_EIGHT[] = {
+        "src/images/powerUps/eight/eight1.png",
+        "src/images/powerUps/eight/eight2.png",
+        "src/images/powerUps/eight/eight3.png",
+        "src/images/powerUps/eight/eight4.png",
+        "src/images/powerUps/eight/eight5.png",
+        "src/images/powerUps/eight/eight6.png",
+        "src/images/powerUps/eight/eight7.png",
+        "src/images/powerUps/eight/eight8.png",
+        "src/images/powerUps/eight/eight9.png",
+        "src/images/powerUps/eight/eight10.png",
+        "src/images/powerUps/eight/eight11.png",
+        "src/images/powerUps/eight/eight12.png",
+        "src/images/powerUps/eight/eight13.png",
+        "src/images/powerUps/eight/eight14.png",
+        "src/images/powerUps/eight/eight15.png",
+        "src/images/powerUps/eight/eight16.png",
+    };
+
+    // Cyan "10X" flower — the top of the ladder.
+    public static final String IMG_POWERUP_TEN[] = {
+        "src/images/powerUps/ten/ten1.png",
+        "src/images/powerUps/ten/ten2.png",
+        "src/images/powerUps/ten/ten3.png",
+        "src/images/powerUps/ten/ten4.png",
+        "src/images/powerUps/ten/ten5.png",
+        "src/images/powerUps/ten/ten6.png",
+        "src/images/powerUps/ten/ten7.png",
+        "src/images/powerUps/ten/ten8.png",
+        "src/images/powerUps/ten/ten9.png",
+        "src/images/powerUps/ten/ten10.png",
+        "src/images/powerUps/ten/ten11.png",
+        "src/images/powerUps/ten/ten12.png",
+        "src/images/powerUps/ten/ten13.png",
+        "src/images/powerUps/ten/ten14.png",
+        "src/images/powerUps/ten/ten15.png",
+        "src/images/powerUps/ten/ten16.png",
     };
 
     // Bullet art for the top two rungs of the gun ladder — animated projectile

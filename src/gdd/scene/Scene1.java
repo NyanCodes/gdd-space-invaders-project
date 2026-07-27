@@ -84,9 +84,12 @@ public class Scene1 extends JPanel {
     // gated on this, so an upgrade always arrives as the answer to an enemy
     // the player has already had to deal with.
     private int seenPlaneTier = 0;
-    // The gun rung most recently dropped. Each newly unlocked rung is handed
-    // out once for free; after that it competes with the other pickups.
-    private GunTier lastGunOffered = null;
+    // The gun ladder's own clock — see Stage.gunUpgradeFirstSeconds and
+    // dueGunTier(). Starts at 0 so the very first rung is only held back by
+    // its own scheduled time; advances by GUN_DROP_RETRY_SECONDS each time a
+    // rung is dropped, so a miss gets retried rather than waiting on the next
+    // rung's schedule.
+    private int nextGunDropFrame = 0;
     private Image lifeIcon; // small vertical (nose-up) ship for the HUD
     private Image tipIconSpeed; // small power-up icons for the start-of-game tip box
     private Image tipIconShield;
@@ -246,7 +249,7 @@ public class Scene1 extends JPanel {
         bossSpawned = false;
         clearDelayFrames = -1;
         seenPlaneTier = 0;
-        lastGunOffered = null;
+        nextGunDropFrame = 0;
         nextAlienSpawnFrame = ALIEN_FIRST_WAVE_FRAME;
         // Only stage 1 delays the first plane; stage 2 opens with them.
         nextPlaneSpawnFrame = stage.firstPlaneFrame;
@@ -329,6 +332,18 @@ public class Scene1 extends JPanel {
         s.setY(terrain.clampToGap(s.getX(), s.getImage().getWidth(null),
                 terrainScroll, s.getY(),
                 s.getImage().getHeight(null), playfieldBottom()));
+    }
+
+    // Same as clampIntoGap, but also keeps power-ups POWERUP_EDGE_MARGIN
+    // clear of the top of the playfield and the dashboard — a wide-open
+    // corridor would otherwise let clampIntoGap push one right up against
+    // either edge.
+    private void clampPowerUpIntoGap(Sprite s) {
+        clampIntoGap(s);
+        int h = s.getImage().getHeight(null);
+        int minY = POWERUP_EDGE_MARGIN;
+        int maxY = Math.max(minY, playfieldBottom() - POWERUP_EDGE_MARGIN - h);
+        s.setY(Math.max(minY, Math.min(s.getY(), maxY)));
     }
 
     /**
@@ -695,6 +710,10 @@ public class Scene1 extends JPanel {
                 return new Color(255, 140, 30);   // orange 4X
             case CHARGED:
                 return new Color(200, 110, 255);  // purple 6X
+            case EIGHT:
+                return new Color(90, 220, 110);   // green 8X
+            case TEN:
+                return new Color(80, 220, 220);   // cyan 10X
             default:
                 return new Color(255, 200, 40);   // blue 2X keeps the old gold
         }
@@ -729,7 +748,7 @@ private void drawDashboard(Graphics g) {
 		// flower that granted the rung so the HUD and the pickup agree.
 		if (player.hasBulletFlower()) {
 			g.setColor(gunTierColor(player.getGunTier()));
-			g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(), 315, labelY);
+			g.drawString("x" + player.getVolleyShots() + " D" + player.getShotDamage(), 315, labelY);
 			g.setColor(new Color(0, 255, 120));
 		}
 
@@ -996,13 +1015,35 @@ private void drawDashboard(Graphics g) {
     }
 
     /**
-     * The gun rung currently on offer, or null if there is nothing to give.
-     * Only ever the single rung above the gun the player is holding, and only
-     * once they have met the plane that rung answers.
+     * The gun rung due to drop right now, or null if nothing should appear
+     * yet. Runs on its own clock rather than the shared random pool: the
+     * single rung above the one the player holds is scheduled for
+     * {@code stage.gunUpgradeFirstSeconds} in, then one more every
+     * {@code stage.gunUpgradeIntervalSeconds} — see Stage and GunTier.
+     *
+     * The plane-tier requirement still applies underneath as a floor, so the
+     * schedule can guarantee a rung by a given time but never hands one out
+     * before its enemy has actually been met. That floor is capped at the
+     * toughest tier this stage's roster ever fields
+     * ({@code stage.planeTierFrames.length - 1}), so a stage with no elite
+     * (stage 1) isn't blocked forever waiting for one to unlock 6X/8X.
+     * {@code stage.gunTierCeiling} is the separate cap on how far a stage's
+     * ladder is allowed to reach at all — stage 1 stops offering at 8X even
+     * though the clock and floor alone would let it reach further.
      */
-    private GunTier offeredGunTier() {
+    private GunTier dueGunTier() {
         GunTier next = player.getGunTier().next();
-        return next != null && seenPlaneTier >= next.unlockPlaneTier ? next : null;
+        if (next == null || next.ordinal() > stage.gunTierCeiling.ordinal()
+                || frame < nextGunDropFrame) {
+            return null;
+        }
+
+        int rung = next.ordinal() - stage.startingGun.ordinal();
+        int scheduledFrame = (stage.gunUpgradeFirstSeconds
+                + (rung - 1) * stage.gunUpgradeIntervalSeconds) * 60;
+        int requiredTier = Math.min(next.unlockPlaneTier, stage.planeTierFrames.length - 1);
+
+        return frame >= scheduledFrame && seenPlaneTier >= requiredTier ? next : null;
     }
 
     // Killing this stage's boss is what clears it — there is no timeout win,
@@ -1046,12 +1087,12 @@ private void drawDashboard(Graphics g) {
                 case "PowerUp-SpeedUp":
                     // Handle speed up item spawn
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
-                    clampIntoGap(speedUp);
+                    clampPowerUpIntoGap(speedUp);
                     powerups.add(speedUp);
                     break;
                 case "PowerUp-Shield":
                     PowerUp shield = new ShieldUp(sd.x, sd.y);
-                    clampIntoGap(shield);
+                    clampPowerUpIntoGap(shield);
                     powerups.add(shield);
                     break;
                 default:
@@ -1059,7 +1100,7 @@ private void drawDashboard(Graphics g) {
                     GunTier scripted = GunTier.forSpawnKey(sd.type);
                     if (scripted != null) {
                         PowerUp bullet = new BulletUp(sd.x, sd.y, scripted);
-                        clampIntoGap(bullet);
+                        clampPowerUpIntoGap(bullet);
                         powerups.add(bullet);
                     } else {
                         System.out.println("Unknown enemy type: " + sd.type);
@@ -1117,38 +1158,35 @@ private void drawDashboard(Graphics g) {
 
         // A power-up drop every POWERUP_MIN..MAX seconds — rare enough to feel
         // like a find, regular enough that there is always one on the way.
-        // Speed and shield are always on the table; the gun flower is only
-        // there when there is a rung left to climb and the player has met the
-        // plane it answers, so it drops out of the pool between escalations.
+        // The gun flower has its own clock (dueGunTier, right below) instead
+        // of competing for this slot, so speed and shield are the only two
+        // in this pool.
         if (frame >= nextPowerupFrame) {
             int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
-            GunTier gun = offeredGunTier();
-            PowerUp drop;
-
-            if (gun != null && gun != lastGunOffered) {
-                // A rung just unlocked: the upgrade is the answer to the plane
-                // the player has only now met, so it arrives on the very next
-                // drop instead of waiting on a dice roll. Miss it and it goes
-                // back into the pool below like any other pickup.
-                drop = new BulletUp(BOARD_WIDTH, py, gun);
-                lastGunOffered = gun;
-            } else {
-                switch (randomizer.nextInt(gun == null ? 2 : 3)) {
-                    case 0:
-                        drop = new SpeedUp(BOARD_WIDTH, py);
-                        break;
-                    case 1:
-                        drop = new ShieldUp(BOARD_WIDTH, py);
-                        break;
-                    default:
-                        drop = new BulletUp(BOARD_WIDTH, py, gun);
-                        break;
-                }
-            }
-            clampIntoGap(drop);
+            // Shield takes two of the three slots — it is the one drop worth
+            // seeing more often, so it lands about twice as often as speed.
+            PowerUp drop = randomizer.nextInt(3) == 0
+                    ? new SpeedUp(BOARD_WIDTH, py)
+                    : new ShieldUp(BOARD_WIDTH, py);
+            clampPowerUpIntoGap(drop);
             powerups.add(drop);
             nextPowerupFrame = frame + (POWERUP_MIN_SECONDS
                     + randomizer.nextInt(POWERUP_MAX_SECONDS - POWERUP_MIN_SECONDS + 1)) * 60;
+        }
+
+        // The gun ladder, on its own scheduled clock rather than the random
+        // pool above — see dueGunTier() for the full rule (fixed time, floor
+        // gated by the plane it answers, capped by the stage's ceiling).
+        GunTier dueGun = dueGunTier();
+        if (dueGun != null) {
+            int gy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
+            PowerUp drop = new BulletUp(BOARD_WIDTH, gy, dueGun);
+            clampPowerUpIntoGap(drop);
+            powerups.add(drop);
+            // Gate the next attempt rather than spawning again next frame;
+            // if this one is missed, retry sooner than the next rung's own
+            // schedule so a drifted-off pickup doesn't stall the ladder.
+            nextGunDropFrame = frame + GUN_DROP_RETRY_SECONDS * 60;
         }
 
         // The extra-life heart, on its own slower clock so it doesn't crowd
@@ -1160,7 +1198,7 @@ private void drawDashboard(Graphics g) {
                     || randomizer.nextInt(HEART_FULL_LIVES_CHANCE) == 0) {
                 int hy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
                 PowerUp heart = new HeartUp(BOARD_WIDTH, hy);
-                clampIntoGap(heart);
+                clampPowerUpIntoGap(heart);
                 powerups.add(heart);
                 nextHeartFrame = frame + (HEART_MIN_SECONDS
                         + randomizer.nextInt(HEART_MAX_SECONDS - HEART_MIN_SECONDS + 1)) * 60;
@@ -1435,21 +1473,23 @@ private void drawDashboard(Graphics g) {
                     }
                 }
 
-                // Shots travel to the right at the player's bullet speed;
-                // remove once off the right edge.
+                // Shots travel along their own heading at the player's bullet
+                // speed; remove once off the right edge, or — for the angled
+                // bullets in a fan — off the top or bottom of the playfield.
                 if (shot.isVisible()) {
-                    int newX = shot.getX() + player.getShotSpeed();
+                    shot.advance(player.getShotSpeed());
 
-                    if (newX > BOARD_WIDTH) {
+                    int shotH = shot.getImage().getHeight(null);
+                    if (shot.getX() > BOARD_WIDTH
+                            || shot.getY() + shotH < 0
+                            || shot.getY() > playfieldBottom()) {
                         shot.die();
                         shotsToRemove.add(shot);
-                    } else {
-                        shot.setX(newX);
+                    } else if (terrain.collides(spriteRect(shot, 2), terrainScroll,
+                            playfieldBottom())) {
                         // Bullets splash against the cave walls.
-                        if (terrain.collides(spriteRect(shot, 2), terrainScroll, playfieldBottom())) {
-                            shot.die();
-                            shotsToRemove.add(shot);
-                        }
+                        shot.die();
+                        shotsToRemove.add(shot);
                     }
                 }
             }
@@ -1590,15 +1630,21 @@ private void drawDashboard(Graphics g) {
             int key = e.getKeyCode();
 
             if (key == KeyEvent.VK_SPACE && inGame) {
-                // The concurrent cap has to leave room for a whole burst, or
-                // the top rungs of the gun could never spend all six shots.
-                int maxShots = Math.max(4, player.getShotsPerBurst());
-                if (shots.size() < maxShots && player.canShoot()) {
-                    // Fire from the tip of the ship: right edge, vertically centered.
+                // The concurrent cap has to leave room for several whole
+                // volleys, or the top rungs could never get their full fan
+                // on screen at once.
+                GunTier tier = player.getGunTier();
+                int volley = player.getVolleyShots();
+                int maxShots = Math.max(8, volley * 3);
+                if (shots.size() + volley <= maxShots && player.canShoot()) {
+                    // Fire from the tip of the ship: right edge, vertically
+                    // centered. The whole volley leaves at the same moment,
+                    // fanned out around straight ahead.
                     int tipX = player.getX() + player.getWidth();
                     int tipY = player.getY() + player.getHeight() / 2;
-                    Shot shot = new Shot(tipX, tipY, player.getGunTier());
-                    shots.add(shot);
+                    for (int i = 0; i < volley; i++) {
+                        shots.add(new Shot(tipX, tipY, tier, tier.angleFor(i)));
+                    }
                     player.startShotCooldown();
                 }
             }

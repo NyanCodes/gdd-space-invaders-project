@@ -23,14 +23,12 @@ public class Player extends Sprite {
     // bosses and cave walls still take a whole life on contact.
     private int hull = PLAYER_HULL;
 
-    // Firing model. Each shot in a burst follows the last after a short
-    // burstGap; only when the burst is spent does the full reload start. How
-    // many shots a burst holds is the gun's rung on the upgrade ladder:
-    // 1 → 2 → 4 → 6.
+    // Firing model. One trigger pull sends the whole volley at once, fanned
+    // out around straight ahead, and then the gun reloads. How many bullets a
+    // volley holds — and how wide the fan is — is the gun's rung on the
+    // upgrade ladder: 1 → 2 → 4 → 6.
     private GunTier gunTier = GunTier.BASE;
-    private int shotsPerBurst = GunTier.BASE.shotsPerBurst;
-    private int burstLeft = GunTier.BASE.shotsPerBurst; // shots left before the reload
-    private int burstGap = 0; // frames until the next shot inside a burst
+    private int volleyShots = GunTier.BASE.volleyShots;
     private int shotDamage = GunTier.BASE.damage; // damage a single bullet deals
 
     private Rectangle bounds = new Rectangle(175,135,17,32);
@@ -95,18 +93,12 @@ public class Player extends Sprite {
     }
 
     public boolean canShoot() {
-        return cooldownLeft == 0 && burstGap == 0;
+        return cooldownLeft == 0;
     }
 
-    /** Books the shot just fired: either the burst continues, or we reload. */
+    /** Books the volley just fired: the gun is now reloading. */
     public void startShotCooldown() {
-        burstLeft--;
-        if (burstLeft > 0) {
-            burstGap = BULLET_BURST_GAP_FRAMES; // second barrel, right behind the first
-        } else {
-            burstLeft = shotsPerBurst;
-            cooldownLeft = shotCooldown;
-        }
+        cooldownLeft = shotCooldown;
     }
 
     public int getShotCooldown() {
@@ -118,7 +110,7 @@ public class Player extends Sprite {
     }
 
     public int reduceShotCooldown(int frames) {
-        shotCooldown = Math.max(30, shotCooldown - frames); // floor at 0.5s
+        shotCooldown = Math.max(PLAYER_SHOT_COOLDOWN_FLOOR, shotCooldown - frames);
         return shotCooldown;
     }
 
@@ -126,8 +118,9 @@ public class Player extends Sprite {
         return shotDamage;
     }
 
-    public int getShotsPerBurst() {
-        return shotsPerBurst;
+    /** Bullets the current rung fires per trigger pull, all at once. */
+    public int getVolleyShots() {
+        return volleyShots;
     }
 
     public GunTier getGunTier() {
@@ -150,9 +143,7 @@ public class Player extends Sprite {
         }
         gunTier = tier;
         shotDamage = tier.damage;
-        shotsPerBurst = tier.shotsPerBurst;
-        burstLeft = shotsPerBurst;
-        burstGap = 0;
+        volleyShots = tier.volleyShots;
         if (tier.shotSpeedBonus != 0) {
             setShotSpeed(shotSpeed + tier.shotSpeedBonus);
         }
@@ -194,7 +185,7 @@ public class Player extends Sprite {
 
     // Reset to the start position after losing a life (keeps upgrades).
     // The hull and the gun are both restored, so a respawn never starts
-    // damaged or mid-burst.
+    // damaged or mid-reload.
     public void respawn() {
         setX(START_X);
         setY(START_Y);
@@ -202,8 +193,6 @@ public class Player extends Sprite {
         dy = 0;
         hull = PLAYER_HULL;
         cooldownLeft = 0;
-        burstGap = 0;
-        burstLeft = shotsPerBurst;
     }
 
     public void act() {
@@ -212,9 +201,6 @@ public class Player extends Sprite {
         }
         if (cooldownLeft > 0) {
             cooldownLeft--;
-        }
-        if (burstGap > 0) {
-            burstGap--;
         }
 
         x += dx;

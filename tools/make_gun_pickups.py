@@ -1,14 +1,19 @@
-"""Derive the tier-2 and tier-3 gun pickups from the existing tier-1 flower.
+"""Derive the tier-2 through tier-5 gun pickups from the existing tier-1 flower.
 
 Same 16-frame spin, hue-rotated body, and the baked-in "2X" label repainted to
-"4X" / "6X" so the pickup says what it grants.
+"4X" / "6X" / "8X" / "10X" so the pickup says what it grants.
 """
 from PIL import Image, ImageDraw, ImageFont
 import colorsys, os
 
 SRC = 'shots'
 FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 15)
-TIERS = {'bolt': (28.0 / 360.0, '4X'), 'charged': (285.0 / 360.0, '6X')}
+TIERS = {
+    'bolt': (28.0 / 360.0, '4X'),
+    'charged': (285.0 / 360.0, '6X'),
+    'eight': (140.0 / 360.0, '8X'),
+    'ten': (190.0 / 360.0, '10X'),
+}
 
 
 def glyph_mask(im):
