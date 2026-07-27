@@ -181,18 +181,21 @@ public class Global {
     public static final int CHARGED_WIDTH = 36;
     public static final int CHARGED_HEIGHT = 28;
 
-    // How hard an enemy may pull to stay inside the corridor, px per frame.
-    // Enemies fly around the rock rather than dying in it, but only this fast,
-    // so a wall closing in reads as the plane banking away from it instead of
-    // the sprite snapping to a new height.
-    public static final int ENEMY_DODGE_SPEED = 3;
+    // Enemies fly around the cave rather than dying in it. This is the most an
+    // enemy may move vertically in one frame — a **cap**, not a speed: it only
+    // steers when the corridor demands it, which across both maps is about 1%
+    // of frames. The rest of the time it flies level, so a generous cap costs
+    // nothing visually and is what lets a plane crossing the map against the
+    // scroll (3 px/frame relative to the terrain) clear a 2-tile wall step.
+    public static final int ENEMY_DODGE_SPEED = 7;
     // Clearance an enemy tries to hold off the rock face, px. A little margin
     // keeps them from grazing the surface pixel-perfectly all the way along.
     public static final int ENEMY_DODGE_MARGIN = 6;
     // How far along the corridor an enemy watches. Without this it would only
-    // react once the rock was already on top of it; a tile of warning is what
-    // lets the dodge start early enough to work.
-    public static final int ENEMY_DODGE_LOOKAHEAD = 32;
+    // react once the rock was already on top of it. Do not raise this much:
+    // the sampled span takes the tightest column across it, so an over-wide
+    // lookahead collapses to an empty range and the steering degrades.
+    public static final int ENEMY_DODGE_LOOKAHEAD = 48;
 
     // Terrain (scrolling cave walls at the top and bottom of the playfield)
     public static final int TERRAIN_TILE = 32; // wall block size in px
