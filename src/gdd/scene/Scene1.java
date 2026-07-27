@@ -334,6 +334,18 @@ public class Scene1 extends JPanel {
                 s.getImage().getHeight(null), playfieldBottom()));
     }
 
+    // Same as clampIntoGap, but also keeps power-ups POWERUP_EDGE_MARGIN
+    // clear of the top of the playfield and the dashboard — a wide-open
+    // corridor would otherwise let clampIntoGap push one right up against
+    // either edge.
+    private void clampPowerUpIntoGap(Sprite s) {
+        clampIntoGap(s);
+        int h = s.getImage().getHeight(null);
+        int minY = POWERUP_EDGE_MARGIN;
+        int maxY = Math.max(minY, playfieldBottom() - POWERUP_EDGE_MARGIN - h);
+        s.setY(Math.max(minY, Math.min(s.getY(), maxY)));
+    }
+
     /**
      * Steers a sprite back toward the open corridor it is flying through,
      * moving at most ENEMY_DODGE_SPEED this frame so it banks around the rock
@@ -736,7 +748,7 @@ private void drawDashboard(Graphics g) {
 		// flower that granted the rung so the HUD and the pickup agree.
 		if (player.hasBulletFlower()) {
 			g.setColor(gunTierColor(player.getGunTier()));
-			g.drawString("x" + player.getShotsPerBurst() + " D" + player.getShotDamage(), 315, labelY);
+			g.drawString("x" + player.getVolleyShots() + " D" + player.getShotDamage(), 315, labelY);
 			g.setColor(new Color(0, 255, 120));
 		}
 
@@ -1075,12 +1087,12 @@ private void drawDashboard(Graphics g) {
                 case "PowerUp-SpeedUp":
                     // Handle speed up item spawn
                     PowerUp speedUp = new SpeedUp(sd.x, sd.y);
-                    clampIntoGap(speedUp);
+                    clampPowerUpIntoGap(speedUp);
                     powerups.add(speedUp);
                     break;
                 case "PowerUp-Shield":
                     PowerUp shield = new ShieldUp(sd.x, sd.y);
-                    clampIntoGap(shield);
+                    clampPowerUpIntoGap(shield);
                     powerups.add(shield);
                     break;
                 default:
@@ -1088,7 +1100,7 @@ private void drawDashboard(Graphics g) {
                     GunTier scripted = GunTier.forSpawnKey(sd.type);
                     if (scripted != null) {
                         PowerUp bullet = new BulletUp(sd.x, sd.y, scripted);
-                        clampIntoGap(bullet);
+                        clampPowerUpIntoGap(bullet);
                         powerups.add(bullet);
                     } else {
                         System.out.println("Unknown enemy type: " + sd.type);
@@ -1151,10 +1163,12 @@ private void drawDashboard(Graphics g) {
         // in this pool.
         if (frame >= nextPowerupFrame) {
             int py = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
-            PowerUp drop = randomizer.nextBoolean()
+            // Shield takes two of the three slots — it is the one drop worth
+            // seeing more often, so it lands about twice as often as speed.
+            PowerUp drop = randomizer.nextInt(3) == 0
                     ? new SpeedUp(BOARD_WIDTH, py)
                     : new ShieldUp(BOARD_WIDTH, py);
-            clampIntoGap(drop);
+            clampPowerUpIntoGap(drop);
             powerups.add(drop);
             nextPowerupFrame = frame + (POWERUP_MIN_SECONDS
                     + randomizer.nextInt(POWERUP_MAX_SECONDS - POWERUP_MIN_SECONDS + 1)) * 60;
@@ -1167,7 +1181,7 @@ private void drawDashboard(Graphics g) {
         if (dueGun != null) {
             int gy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
             PowerUp drop = new BulletUp(BOARD_WIDTH, gy, dueGun);
-            clampIntoGap(drop);
+            clampPowerUpIntoGap(drop);
             powerups.add(drop);
             // Gate the next attempt rather than spawning again next frame;
             // if this one is missed, retry sooner than the next rung's own
@@ -1184,7 +1198,7 @@ private void drawDashboard(Graphics g) {
                     || randomizer.nextInt(HEART_FULL_LIVES_CHANCE) == 0) {
                 int hy = 60 + randomizer.nextInt(Math.max(1, playfieldBottom() - 140));
                 PowerUp heart = new HeartUp(BOARD_WIDTH, hy);
-                clampIntoGap(heart);
+                clampPowerUpIntoGap(heart);
                 powerups.add(heart);
                 nextHeartFrame = frame + (HEART_MIN_SECONDS
                         + randomizer.nextInt(HEART_MAX_SECONDS - HEART_MIN_SECONDS + 1)) * 60;
@@ -1459,21 +1473,23 @@ private void drawDashboard(Graphics g) {
                     }
                 }
 
-                // Shots travel to the right at the player's bullet speed;
-                // remove once off the right edge.
+                // Shots travel along their own heading at the player's bullet
+                // speed; remove once off the right edge, or — for the angled
+                // bullets in a fan — off the top or bottom of the playfield.
                 if (shot.isVisible()) {
-                    int newX = shot.getX() + player.getShotSpeed();
+                    shot.advance(player.getShotSpeed());
 
-                    if (newX > BOARD_WIDTH) {
+                    int shotH = shot.getImage().getHeight(null);
+                    if (shot.getX() > BOARD_WIDTH
+                            || shot.getY() + shotH < 0
+                            || shot.getY() > playfieldBottom()) {
                         shot.die();
                         shotsToRemove.add(shot);
-                    } else {
-                        shot.setX(newX);
+                    } else if (terrain.collides(spriteRect(shot, 2), terrainScroll,
+                            playfieldBottom())) {
                         // Bullets splash against the cave walls.
-                        if (terrain.collides(spriteRect(shot, 2), terrainScroll, playfieldBottom())) {
-                            shot.die();
-                            shotsToRemove.add(shot);
-                        }
+                        shot.die();
+                        shotsToRemove.add(shot);
                     }
                 }
             }
@@ -1614,15 +1630,21 @@ private void drawDashboard(Graphics g) {
             int key = e.getKeyCode();
 
             if (key == KeyEvent.VK_SPACE && inGame) {
-                // The concurrent cap has to leave room for a whole burst, or
-                // the top rungs of the gun could never spend all six shots.
-                int maxShots = Math.max(4, player.getShotsPerBurst());
-                if (shots.size() < maxShots && player.canShoot()) {
-                    // Fire from the tip of the ship: right edge, vertically centered.
+                // The concurrent cap has to leave room for several whole
+                // volleys, or the top rungs could never get their full fan
+                // on screen at once.
+                GunTier tier = player.getGunTier();
+                int volley = player.getVolleyShots();
+                int maxShots = Math.max(8, volley * 3);
+                if (shots.size() + volley <= maxShots && player.canShoot()) {
+                    // Fire from the tip of the ship: right edge, vertically
+                    // centered. The whole volley leaves at the same moment,
+                    // fanned out around straight ahead.
                     int tipX = player.getX() + player.getWidth();
                     int tipY = player.getY() + player.getHeight() / 2;
-                    Shot shot = new Shot(tipX, tipY, player.getGunTier());
-                    shots.add(shot);
+                    for (int i = 0; i < volley; i++) {
+                        shots.add(new Shot(tipX, tipY, tier, tier.angleFor(i)));
+                    }
                     player.startShotCooldown();
                 }
             }

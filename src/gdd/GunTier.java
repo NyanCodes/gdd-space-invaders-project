@@ -4,12 +4,14 @@ package gdd;
  * The player's gun as a ladder of upgrades.
  *
  * Each flower pickup moves the ship exactly one rung up, and a rung is never
- * lost, so the gun only ever goes forward. What a rung buys is <em>shots
- * before the reload</em> — 1, 2, 4, 6, 8, then 10. Only the first upgrade
- * changes the bullet itself (double damage and a speed bonus); after that the
- * bullet is the same weight and simply comes more often. The top two rungs
- * (8X/10X) reuse the charged bolt's art outright — there is nothing left to
- * change but the burst size.
+ * lost, so the gun only ever goes forward. What a rung buys is <em>a wider
+ * volley</em> — 1, 2, 4, 6, 8, then 10 bullets, all fired on the same trigger
+ * pull and spread into a forward fan, so a higher rung covers more of the
+ * screen at once. Only the first upgrade changes the bullet itself (double
+ * damage and a speed bonus); after that the bullet is the same weight and
+ * simply arrives in greater numbers. The top two rungs (8X/10X) reuse the
+ * charged bolt's art outright — there is nothing left to change but the
+ * width of the fan.
  *
  * Each rung is unlocked by the enemy it exists to answer: the bolt flower only
  * starts dropping once the player has met a heavy plane, and the charged
@@ -25,36 +27,43 @@ package gdd;
  */
 public enum GunTier {
 
-    /** The starting gun: one plain bullet, one damage, per reload. */
-    BASE(1, 1, 0, null, null, null, 0, 0, 0),
+    /** The starting gun: one plain bullet, one damage, straight ahead. */
+    BASE(1, 0, 1, 0, null, null, null, 0, 0, 0),
 
-    /** Blue "2X" flower — the shot2 bullet: double damage, two shots. */
-    FLOWER(Global.BULLET_SHOTS_PER_BURST, Global.BULLET_DAMAGE,
-            Global.BULLET_SHOT_SPEED_BONUS,
+    /** Blue "2X" flower — the shot2 bullet: double damage, two directions. */
+    FLOWER(Global.BULLET_VOLLEY_SHOTS, Global.BULLET_SPREAD_DEGREES,
+            Global.BULLET_DAMAGE, Global.BULLET_SHOT_SPEED_BONUS,
             new String[]{Global.IMG_SHOT2}, Global.IMG_POWERUP_BULLET, "PowerUp-Bullet",
             Global.SHOT2_WIDTH, Global.SHOT2_HEIGHT, 0),
 
-    /** Orange "4X" flower — the bolt: four shots before the reload. */
-    BOLT(Global.BOLT_SHOTS_PER_BURST, Global.BULLET_DAMAGE, 0,
+    /** Orange "4X" flower — the bolt: a four-way fan. */
+    BOLT(Global.BOLT_VOLLEY_SHOTS, Global.BOLT_SPREAD_DEGREES,
+            Global.BULLET_DAMAGE, 0,
             Global.IMG_bolt, Global.IMG_POWERUP_BOLT, "PowerUp-Bolt",
             Global.BOLT_WIDTH, Global.BOLT_HEIGHT, 1),
 
-    /** Purple "6X" flower — the charged bolt: six shots before the reload. */
-    CHARGED(Global.CHARGED_SHOTS_PER_BURST, Global.BULLET_DAMAGE, 0,
+    /** Purple "6X" flower — the charged bolt: a six-way fan. */
+    CHARGED(Global.CHARGED_VOLLEY_SHOTS, Global.CHARGED_SPREAD_DEGREES,
+            Global.BULLET_DAMAGE, 0,
             Global.IMG_charge, Global.IMG_POWERUP_CHARGED, "PowerUp-Charged",
             Global.CHARGED_WIDTH, Global.CHARGED_HEIGHT, 2),
 
-    /** Green "8X" flower — same charged-bolt bullet, eight shots before the reload. */
-    EIGHT(Global.EIGHT_SHOTS_PER_BURST, Global.BULLET_DAMAGE, 0,
+    /** Green "8X" flower — same charged-bolt bullet, an eight-way fan. */
+    EIGHT(Global.EIGHT_VOLLEY_SHOTS, Global.EIGHT_SPREAD_DEGREES,
+            Global.BULLET_DAMAGE, 0,
             Global.IMG_charge, Global.IMG_POWERUP_EIGHT, "PowerUp-Eight",
             Global.CHARGED_WIDTH, Global.CHARGED_HEIGHT, 2),
 
-    /** Cyan "10X" flower — the top of the ladder: ten shots before the reload. */
-    TEN(Global.TEN_SHOTS_PER_BURST, Global.BULLET_DAMAGE, 0,
+    /** Cyan "10X" flower — the top of the ladder: a ten-way fan. */
+    TEN(Global.TEN_VOLLEY_SHOTS, Global.TEN_SPREAD_DEGREES,
+            Global.BULLET_DAMAGE, 0,
             Global.IMG_charge, Global.IMG_POWERUP_TEN, "PowerUp-Ten",
             Global.CHARGED_WIDTH, Global.CHARGED_HEIGHT, 2);
 
-    public final int shotsPerBurst;
+    /** Bullets this rung puts out per trigger pull, all at the same moment. */
+    public final int volleyShots;
+    /** Angle of the outermost bullet in the fan, in degrees off straight ahead. */
+    public final int spreadDegrees;
     public final int damage;
     public final int shotSpeedBonus;
     /** Bullet art. More than one entry means the bullet animates. */
@@ -72,10 +81,11 @@ public enum GunTier {
      */
     public final int unlockPlaneTier;
 
-    GunTier(int shotsPerBurst, int damage, int shotSpeedBonus,
+    GunTier(int volleyShots, int spreadDegrees, int damage, int shotSpeedBonus,
             String[] bulletFrames, String[] pickupFrames, String spawnKey,
             int bulletWidth, int bulletHeight, int unlockPlaneTier) {
-        this.shotsPerBurst = shotsPerBurst;
+        this.volleyShots = volleyShots;
+        this.spreadDegrees = spreadDegrees;
         this.damage = damage;
         this.shotSpeedBonus = shotSpeedBonus;
         this.bulletFrames = bulletFrames;
@@ -84,6 +94,19 @@ public enum GunTier {
         this.bulletWidth = bulletWidth;
         this.bulletHeight = bulletHeight;
         this.unlockPlaneTier = unlockPlaneTier;
+    }
+
+    /**
+     * Heading of bullet {@code index} of this rung's volley, in degrees, where
+     * 0 is straight ahead and the fan is symmetric about it. A single-shot
+     * rung always fires straight.
+     */
+    public double angleFor(int index) {
+        if (volleyShots <= 1 || spreadDegrees == 0) {
+            return 0;
+        }
+        double step = (2.0 * spreadDegrees) / (volleyShots - 1);
+        return -spreadDegrees + step * index;
     }
 
     /** The next rung up, or null if the gun is already fully upgraded. */

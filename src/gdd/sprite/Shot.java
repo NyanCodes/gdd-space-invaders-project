@@ -5,8 +5,10 @@ import gdd.GunTier;
 import gdd.ImageUtil;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import javax.swing.ImageIcon;
 
@@ -15,39 +17,86 @@ import javax.swing.ImageIcon;
  *
  * The artwork comes from the gun's {@link GunTier}; the top two rungs are drawn
  * as several frames, so those bullets animate as they fly. Damage and travel
- * speed live on the {@link Player}, not here — Scene1 reads them when it moves
- * the shot, which is also why {@link #act()} only advances the animation.
+ * speed live on the {@link Player}, not here — Scene1 reads the speed when it
+ * calls {@link #advance}, which is also why {@link #act()} only advances the
+ * animation.
+ *
+ * Every rung above the first fires its whole volley at once as a fan, so a
+ * bullet carries its own heading rather than simply flying right.
  */
 public class Shot extends Sprite {
 
     // Trimming and scaling the art is per-pixel work, so each rung's frames
-    // are built once and shared by every bullet fired from that rung.
+    // are built once and shared by every bullet fired from that rung. Angled
+    // bullets are drawn turned to face where they fly, and those turned
+    // frames are cached the same way, per rung and angle.
     private static final Map<GunTier, Image[]> FRAMES = new EnumMap<>(GunTier.class);
+    private static final Map<String, Image[]> TURNED_FRAMES = new HashMap<>();
 
     private final Image[] frames;
+    private final double dirX;
+    private final double dirY;
+    // Sub-pixel position. An angled bullet moves a fractional number of pixels
+    // per axis each frame, so rounding Sprite's int x/y every frame would bend
+    // its path; the exact position is kept here and only rounded for drawing.
+    private double preciseX;
+    private double preciseY;
     private int animTick = 0;
-
-    public Shot() {
-        this.frames = null;
-    }
 
     // (tipX, tipY) is the tip of the ship: the right edge, vertically centered.
     public Shot(int tipX, int tipY) {
-        this(tipX, tipY, GunTier.BASE);
+        this(tipX, tipY, GunTier.BASE, 0);
     }
 
-    public Shot(int tipX, int tipY, GunTier tier) {
+    public Shot(int tipX, int tipY, GunTier tier, double angleDegrees) {
 
-        this.frames = framesFor(tier == null ? GunTier.BASE : tier);
+        this.frames = framesFor(tier == null ? GunTier.BASE : tier, angleDegrees);
         Image bullet = frames[0];
         setImage(bullet);
+
+        // Screen y grows downward, so a positive angle sends the bullet down.
+        // The fan is symmetric, so which way that points does not matter.
+        double radians = Math.toRadians(angleDegrees);
+        this.dirX = Math.cos(radians);
+        this.dirY = Math.sin(radians);
 
         // Anchor at the ship's tip: left edge at the tip, centered on it vertically.
         setX(tipX);
         setY(tipY - bullet.getHeight(null) / 2);
+        this.preciseX = getX();
+        this.preciseY = getY();
     }
 
-    private static Image[] framesFor(GunTier tier) {
+    /** Moves the bullet one frame along its own heading. */
+    public void advance(int speed) {
+        preciseX += dirX * speed;
+        preciseY += dirY * speed;
+        setX((int) Math.round(preciseX));
+        setY((int) Math.round(preciseY));
+    }
+
+    private static Image[] framesFor(GunTier tier, double angleDegrees) {
+        Image[] straight = straightFramesFor(tier);
+
+        int angle = (int) Math.round(angleDegrees);
+        if (angle == 0) {
+            return straight;
+        }
+
+        String key = tier.name() + "@" + angle;
+        Image[] cached = TURNED_FRAMES.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Image[] built = new Image[straight.length];
+        for (int i = 0; i < straight.length; i++) {
+            built[i] = turned(straight[i], angle);
+        }
+        TURNED_FRAMES.put(key, built);
+        return built;
+    }
+
+    private static Image[] straightFramesFor(GunTier tier) {
         Image[] cached = FRAMES.get(tier);
         if (cached != null) {
             return cached;
@@ -74,6 +123,27 @@ public class Shot extends Sprite {
         }
         animTick++;
         setImage(frames[(animTick / BULLET_ANIM_FRAMES) % frames.length]);
+    }
+
+    // Turns a bullet frame to face its heading. The canvas grows to the
+    // rotated bounding box so no corner of the art is clipped.
+    private static Image turned(Image src, int angleDegrees) {
+        int w = src.getWidth(null);
+        int h = src.getHeight(null);
+        double radians = Math.toRadians(angleDegrees);
+        double cos = Math.abs(Math.cos(radians));
+        double sin = Math.abs(Math.sin(radians));
+        int tw = (int) Math.round(w * cos + h * sin);
+        int th = (int) Math.round(w * sin + h * cos);
+
+        BufferedImage out = new BufferedImage(tw, th, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = out.createGraphics();
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2.rotate(radians, tw / 2.0, th / 2.0);
+        g2.drawImage(src, (tw - w) / 2, (th - h) / 2, null);
+        g2.dispose();
+        return out;
     }
 
     // The default bullet is a tiny vertical sprite, so it is scaled up and
