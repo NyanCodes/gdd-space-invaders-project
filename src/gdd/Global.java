@@ -171,6 +171,8 @@ public class Global {
     public static final int BULLET_SHOTS_PER_BURST = 2;  // bullet flower
     public static final int BOLT_SHOTS_PER_BURST = 4;    // bolt flower
     public static final int CHARGED_SHOTS_PER_BURST = 6; // charged flower
+    public static final int EIGHT_SHOTS_PER_BURST = 8;   // eight flower
+    public static final int TEN_SHOTS_PER_BURST = 10;    // ten flower, top of the ladder
     public static final int BULLET_BURST_GAP_FRAMES = 12; // pause between burst shots
     public static final int BULLET_SHOT_SPEED_BONUS = 8;
     public static final int BULLET_ANIM_FRAMES = 4; // game frames per bullet art frame
@@ -180,6 +182,22 @@ public class Global {
     public static final int BOLT_HEIGHT = 20;
     public static final int CHARGED_WIDTH = 36;
     public static final int CHARGED_HEIGHT = 28;
+    // 8X and 10X reuse the charged bolt's animated bullet art rather than
+    // getting their own — only the first rung (the flower) ever changes the
+    // bullet itself, so the top two rungs share CHARGED's frames and box.
+
+    // The gun ladder's own clock (see GunTier, Stage.gunUpgradeFirstSeconds).
+    // Stage 1 starts on BASE and gets its first flower at 1:00, then a rung
+    // every GUN_UPGRADE_INTERVAL_SECONDS after that (1:20, 1:40, 2:00 for
+    // 4X/6X/8X) so the ladder tops out at 8X just before its 2:30 boss.
+    // Stage 2 starts already on the 2X flower, so its first climb (to 4X) is
+    // due almost immediately.
+    public static final int GUN_UPGRADE_STAGE1_FIRST_SECONDS = 60;
+    public static final int GUN_UPGRADE_STAGE2_FIRST_SECONDS = 20;
+    public static final int GUN_UPGRADE_INTERVAL_SECONDS = 20;
+    // If a scheduled rung drifts off-screen uncollected, how soon to try
+    // dropping it again rather than waiting out the next stage's clock.
+    public static final int GUN_DROP_RETRY_SECONDS = 15;
 
     // Enemies fly around the cave rather than dying in it. This is the most an
     // enemy may move vertically in one frame — a **cap**, not a speed: it only
@@ -366,6 +384,46 @@ public class Global {
         "src/images/powerUps/charged/charged14.png",
         "src/images/powerUps/charged/charged15.png",
         "src/images/powerUps/charged/charged16.png",
+    };
+
+    // Green "8X" flower — same derivation as bolt/charged above.
+    public static final String IMG_POWERUP_EIGHT[] = {
+        "src/images/powerUps/eight/eight1.png",
+        "src/images/powerUps/eight/eight2.png",
+        "src/images/powerUps/eight/eight3.png",
+        "src/images/powerUps/eight/eight4.png",
+        "src/images/powerUps/eight/eight5.png",
+        "src/images/powerUps/eight/eight6.png",
+        "src/images/powerUps/eight/eight7.png",
+        "src/images/powerUps/eight/eight8.png",
+        "src/images/powerUps/eight/eight9.png",
+        "src/images/powerUps/eight/eight10.png",
+        "src/images/powerUps/eight/eight11.png",
+        "src/images/powerUps/eight/eight12.png",
+        "src/images/powerUps/eight/eight13.png",
+        "src/images/powerUps/eight/eight14.png",
+        "src/images/powerUps/eight/eight15.png",
+        "src/images/powerUps/eight/eight16.png",
+    };
+
+    // Cyan "10X" flower — the top of the ladder.
+    public static final String IMG_POWERUP_TEN[] = {
+        "src/images/powerUps/ten/ten1.png",
+        "src/images/powerUps/ten/ten2.png",
+        "src/images/powerUps/ten/ten3.png",
+        "src/images/powerUps/ten/ten4.png",
+        "src/images/powerUps/ten/ten5.png",
+        "src/images/powerUps/ten/ten6.png",
+        "src/images/powerUps/ten/ten7.png",
+        "src/images/powerUps/ten/ten8.png",
+        "src/images/powerUps/ten/ten9.png",
+        "src/images/powerUps/ten/ten10.png",
+        "src/images/powerUps/ten/ten11.png",
+        "src/images/powerUps/ten/ten12.png",
+        "src/images/powerUps/ten/ten13.png",
+        "src/images/powerUps/ten/ten14.png",
+        "src/images/powerUps/ten/ten15.png",
+        "src/images/powerUps/ten/ten16.png",
     };
 
     // Bullet art for the top two rungs of the gun ladder — animated projectile
